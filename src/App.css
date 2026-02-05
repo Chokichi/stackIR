@@ -1,0 +1,272 @@
+.app {
+  min-height: 100vh;
+  padding: 1.5rem;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.header h1 {
+  font-size: 1.75rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  letter-spacing: -0.02em;
+}
+
+.subtitle {
+  color: var(--subtitle);
+  font-size: 0.95rem;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.upload-zone {
+  position: relative;
+  margin-bottom: 1.5rem;
+}
+
+.file-input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.drop-area {
+  border: 2px dashed var(--border);
+  border-radius: 12px;
+  padding: 3rem 2rem;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.drop-area:hover {
+  border-color: var(--accent);
+  background: var(--drop-hover);
+}
+
+.drop-area span {
+  display: block;
+}
+
+.drop-area .formats {
+  font-size: 0.85rem;
+  color: var(--subtitle);
+  margin-top: 0.25rem;
+}
+
+.error {
+  background: var(--error-bg);
+  color: var(--error);
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+@media (max-width: 768px) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+}
+
+.controls {
+  background: var(--panel);
+  border-radius: 12px;
+  padding: 1.25rem;
+  border: 1px solid var(--border);
+  position: sticky;
+  top: 1rem;
+}
+
+.control-group {
+  margin-bottom: 1.25rem;
+}
+
+.control-group:last-of-type {
+  margin-bottom: 1.5rem;
+}
+
+.live-toggle-group {
+  margin-bottom: 1rem;
+}
+
+.toggle-label {
+  display: flex !important;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.toggle-label input[type='checkbox'] {
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+}
+
+.live-warning {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--error);
+  margin-top: 0.35rem;
+}
+
+.control-group label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: 0.4rem;
+}
+
+.color-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.hex-input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: ui-monospace, monospace;
+  font-size: 0.9rem;
+  background: var(--input-bg);
+  color: inherit;
+}
+
+.color-picker {
+  width: 40px;
+  height: 36px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  background: var(--input-bg);
+}
+
+.eyedropper-btn {
+  padding: 0.5rem 0.75rem;
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.eyedropper-btn.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.control-group input[type='range'] {
+  width: 100%;
+  margin-bottom: 0.25rem;
+}
+
+.hint {
+  font-size: 0.75rem;
+  color: var(--subtitle);
+  display: block;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.primary {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.primary:hover {
+  filter: brightness(1.05);
+}
+
+.secondary {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ghost {
+  color: var(--subtitle);
+}
+
+.ghost:hover {
+  color: inherit;
+}
+
+.preview-area {
+  position: relative;
+}
+
+.eyedropper-hint {
+  position: absolute;
+  top: -1.5rem;
+  left: 0;
+  font-size: 0.8rem;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.preview-wrapper {
+  background: repeating-conic-gradient(#808080 0% 25%, #c0c0c0 0% 50%) 50% / 16px 16px;
+  border-radius: 8px;
+  padding: 12px;
+  display: inline-block;
+  max-width: 100%;
+}
+
+.preview-bg-btn {
+  padding: 0.4rem 0.6rem;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.preview-bg-btn.active {
+  background: var(--accent);
+  color: white;
+  border-color: var(--accent);
+}
+
+.zoom-lens {
+  position: fixed;
+  z-index: 100;
+  pointer-events: none;
+  border-radius: 6px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  overflow: hidden;
+}
+
+.zoom-lens canvas {
+  display: block;
+  border-radius: 6px;
+}
+
+.preview-img {
+  max-width: 100%;
+  max-height: 70vh;
+  display: block;
+  border-radius: 4px;
+}
+
+.offscreen {
+  position: absolute;
+  left: -9999px;
+  width: 0;
+  height: 0;
+}
