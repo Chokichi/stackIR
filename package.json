@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/generateSampleSpectra.js && vite build",
+    "generate:samples": "node scripts/generateSampleSpectra.js",
     "lint": "eslint .",
     "preview": "vite preview"
   },
