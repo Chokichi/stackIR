@@ -7,8 +7,10 @@ import {
   resampleImageToWavenumberSpace,
 } from '../utils/imageUtils'
 import { parseJDX } from '../utils/jdxParser'
-import { normXToWavenumber, findLocalMinima } from '../utils/spectrumPath'
+import { normXToWavenumber, findLocalMinima, findLocalMaxima } from '../utils/spectrumPath'
+import { isAbsorbance, getDisplayY } from '../utils/spectrumUnits'
 import { SpectrumDataDisplay } from '../components/SpectrumDataDisplay'
+import { HelpModal, HelpIcon } from '../components/HelpModal'
 import { SAMPLE_SPECTRA } from '../data/sampleSpectra'
 import './StackingView.css'
 
@@ -453,6 +455,8 @@ function SettingsModal({
   setShowWavenumberBox,
   showWavenumbersInLabels,
   setShowWavenumbersInLabels,
+  displayYUnits,
+  setDisplayYUnits,
 }) {
   if (!open) return null
   return (
@@ -465,6 +469,19 @@ function SettingsModal({
         <div className="settings-modal-body">
           {hasDataOnly && (
             <>
+              <div className="settings-modal-option">
+                <label htmlFor="display-y-units">Y-axis display</label>
+                <select
+                  id="display-y-units"
+                  value={displayYUnits}
+                  onChange={(e) => setDisplayYUnits(e.target.value)}
+                  style={{ padding: '0.5rem 0.75rem', borderRadius: 6, width: '100%' }}
+                >
+                  <option value="transmittance">Transmittance</option>
+                  <option value="absorbance">Absorbance</option>
+                </select>
+              </div>
+              <span className="settings-modal-hint">Convert absorbance data to transmittance by default; switch to view as absorbance</span>
               <label className="settings-modal-checkbox">
                 <input
                   type="checkbox"
@@ -511,7 +528,7 @@ function SampleLibraryModal({ onAddSpectrum, onClose }) {
       const parsed = parseJDX(sample.jdxContent)
       if (!parsed.x?.length || !parsed.y?.length) return
       onAddSpectrum({
-        data: { x: parsed.x, y: parsed.y },
+        data: { x: parsed.x, y: parsed.y, yUnits: parsed.yUnits },
         fileName: sample.name,
         metadata: {
           minWavenumber: parsed.minWavenumber,
@@ -596,6 +613,7 @@ export default function StackingView() {
   const [normalizeY, setNormalizeY] = useState(true)
   const [showWavenumberBox, setShowWavenumberBox] = useState(true)
   const [showWavenumbersInLabels, setShowWavenumbersInLabels] = useState(true)
+  const [displayYUnits, setDisplayYUnits] = useState('transmittance')
   const [debugCursor, setDebugCursor] = useState(null)
   const [tool, setTool] = useState('zoom')
   const [activeSpectrumId, setActiveSpectrumId] = useState(null)
@@ -953,10 +971,13 @@ export default function StackingView() {
           } else if (tool === 'peak' && activeSpectrumId) {
             const spec = spectra.find((s) => s.id === activeSpectrumId)
             if (spec?.data?.x?.length) {
-              const minima = findLocalMinima(spec.data.x, spec.data.y, left, right)
-              if (minima.length > 0) {
+              const yArr = spec.data.y
+              const peaks = isAbsorbance(spec.data.yUnits)
+                ? findLocalMaxima(spec.data.x, yArr, left, right)
+                : findLocalMinima(spec.data.x, yArr, left, right)
+              if (peaks.length > 0) {
                 const existing = spec.peaks ?? []
-                const newPeaks = minima.map((m) => ({ wavenumber: m.wavenumber, groupId: null, label: '' }))
+                const newPeaks = peaks.map((m) => ({ wavenumber: m.wavenumber, groupId: null, label: '' }))
                 updateSpectrum(activeSpectrumId, { peaks: [...existing, ...newPeaks] })
               }
             }
@@ -1175,6 +1196,7 @@ export default function StackingView() {
   const [downloadFormat, setDownloadFormat] = useState('png')
   const [exportModalOpen, setExportModalOpen] = useState(false)
   const [exportIncludeList, setExportIncludeList] = useState(false)
+  const [helpModalOpen, setHelpModalOpen] = useState(false)
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
   const [yMinOffset, setYMinOffset] = useState(0)
   useEffect(() => {
@@ -1352,7 +1374,7 @@ export default function StackingView() {
         const baseName = file.name.replace(/\.(jdx|jcamp|dx)$/i, '')
         const fileName = parsed.title || baseName || file.name
         addSpectrum({
-          data: { x: parsed.x, y: parsed.y },
+          data: { x: parsed.x, y: parsed.y, yUnits: parsed.yUnits },
           fileName,
           metadata: {
             minWavenumber: parsed.minWavenumber,
@@ -1372,7 +1394,18 @@ export default function StackingView() {
     return (
       <div className="app stacking-empty">
         <header className="header">
-          <h1>Stack<span className="header-ir">IR</span></h1>
+          <div className="header-with-help">
+            <h1>Stack<span className="header-ir">IR</span></h1>
+            <button
+              type="button"
+              onClick={() => setHelpModalOpen(true)}
+              className="help-btn-header"
+              title="Help"
+              aria-label="Help"
+            >
+              <HelpIcon size={18} />
+            </button>
+          </div>
           <p className="subtitle">
             Choose a spectrum from the sample library or load your own JCAMP-DX files (.jdx, .dx).
           </p>
@@ -1401,6 +1434,9 @@ export default function StackingView() {
           </div>
           {jdxError && <div className="error" style={{ marginTop: '1rem' }}>{jdxError}</div>}
         </header>
+        {helpModalOpen && (
+          <HelpModal open={helpModalOpen} onClose={() => setHelpModalOpen(false)} page="stacking" />
+        )}
         {sampleLibraryOpen && (
           <SampleLibraryModal
             onAddSpectrum={handleAddFromSampleLibrary}
@@ -1453,6 +1489,10 @@ export default function StackingView() {
           </button>
         </>
       )}
+      <button type="button" onClick={() => setHelpModalOpen(true)} className="tool-btn secondary btn-with-icon" title="Help">
+        <HelpIcon size={14} />
+        <span>Help</span>
+      </button>
       <button type="button" onClick={() => setSettingsModalOpen(true)} className="tool-btn secondary btn-with-icon" title="Settings">
         <SettingsIcon size={14} />
         <span>Settings</span>
@@ -1586,6 +1626,7 @@ export default function StackingView() {
                 overlayMode={overlayMode}
                 distributedGap={distributedGap}
                 normalizeY={normalizeY}
+                displayYUnits={displayYUnits}
                 tool={tool}
                 activeSpectrumId={activeSpectrumId}
                 showWavenumbersInLabels={showWavenumbersInLabels}
@@ -2200,6 +2241,8 @@ export default function StackingView() {
         setShowWavenumberBox={setShowWavenumberBox}
         showWavenumbersInLabels={showWavenumbersInLabels}
         setShowWavenumbersInLabels={setShowWavenumbersInLabels}
+        displayYUnits={displayYUnits}
+        setDisplayYUnits={setDisplayYUnits}
       />
       <ExportModal
         open={exportModalOpen}
@@ -2214,6 +2257,7 @@ export default function StackingView() {
           setExportModalOpen(false)
         }}
       />
+      <HelpModal open={helpModalOpen} onClose={() => setHelpModalOpen(false)} page="stacking" />
     </div>
   )
 }

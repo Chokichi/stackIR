@@ -1,4 +1,15 @@
 /* Uses shared App.css for most styles */
+.help-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: inherit;
+  font-family: inherit;
+}
+
 .file-bar {
   display: flex;
   align-items: center;

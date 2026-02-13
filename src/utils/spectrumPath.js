@@ -96,6 +96,26 @@ export function findLocalMinima(xArr, yArr, wMin, wMax) {
 }
 
 /**
+ * Find local maxima in (x, y) data within wavenumber range [wMin, wMax].
+ * In absorbance IR spectra, absorption peaks appear as maxima.
+ * Returns array of { wavenumber, value } sorted by wavenumber.
+ */
+export function findLocalMaxima(xArr, yArr, wMin, wMax) {
+  const n = xArr.length
+  if (n < 3) return []
+  const results = []
+  for (let i = 1; i < n - 1; i++) {
+    const w = xArr[i]
+    if (w < wMin || w > wMax) continue
+    const y = yArr[i]
+    if (y >= yArr[i - 1] && y >= yArr[i + 1]) {
+      results.push({ wavenumber: w, value: y })
+    }
+  }
+  return results
+}
+
+/**
  * Interpolate y value at target x from (xArr, yArr) using linear interpolation.
  */
 export function interpolateAt(xArr, yArr, targetX) {

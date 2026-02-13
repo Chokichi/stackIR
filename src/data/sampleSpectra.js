@@ -5,9 +5,10 @@
  */
 import spectrum_0 from '../../sample-spectra/100-41-4-IR.jdx?raw'
 import spectrum_1 from '../../sample-spectra/109-94-4-IR.jdx?raw'
-import spectrum_2 from '../../sample-spectra/119-36-8-IR.jdx?raw'
-import spectrum_3 from '../../sample-spectra/141-78-6-IR.jdx?raw'
-import spectrum_4 from '../../sample-spectra/6630-86-0-IR.jdx?raw'
+import spectrum_2 from '../../sample-spectra/111-36-4-IR.jdx?raw'
+import spectrum_3 from '../../sample-spectra/119-36-8-IR.jdx?raw'
+import spectrum_4 from '../../sample-spectra/141-78-6-IR.jdx?raw'
+import spectrum_5 from '../../sample-spectra/6630-86-0-IR.jdx?raw'
 
 export const SAMPLE_SPECTRA = [
   {
@@ -23,21 +24,27 @@ export const SAMPLE_SPECTRA = [
     jdxContent: spectrum_1,
   },
   {
+    id: '111-36-4',
+    name: 'Butane, 1-isocyanato-',
+    casNumber: '111-36-4',
+    jdxContent: spectrum_2,
+  },
+  {
     id: '119-36-8',
     name: 'METHYL SALICYLATE',
     casNumber: '119-36-8',
-    jdxContent: spectrum_2,
+    jdxContent: spectrum_3,
   },
   {
     id: '141-78-6',
     name: 'ACETIC ACID, ETHYL ESTER',
     casNumber: '141-78-6',
-    jdxContent: spectrum_3,
+    jdxContent: spectrum_4,
   },
   {
     id: '6630-86-0',
     name: 'BENZIL, PHENYLHYDRAZONE',
     casNumber: '6630-86-0',
-    jdxContent: spectrum_4,
+    jdxContent: spectrum_5,
   }
 ]

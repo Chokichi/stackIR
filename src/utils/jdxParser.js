@@ -18,11 +18,13 @@ export function parseJDX(text) {
   const y = Array.from(data.y)
   const minX = Math.min(...x)
   const maxX = Math.max(...x)
+  const rawYUnits = spectrum?.yUnits ?? block?.info?.YUNITS ?? ''
+  const yUnits = typeof rawYUnits === 'string' ? rawYUnits.toUpperCase().trim() : ''
 
   return {
     title: block?.title ?? 'Spectrum',
     xUnits: spectrum?.xUnits ?? block?.info?.XUNITS ?? '',
-    yUnits: spectrum?.yUnits ?? block?.info?.YUNITS ?? '',
+    yUnits: yUnits || 'TRANSMITTANCE',
     x,
     y,
     minWavenumber: minX,

@@ -1,5 +1,6 @@
 import { useMemo, useEffect } from 'react'
 import { spectrumToPath, wavenumberToNormX, dataToSvgCoords, interpolateAt } from '../utils/spectrumPath'
+import { getDisplayY } from '../utils/spectrumUnits'
 
 const PAD_LEFT = 52
 const PAD_RIGHT = 16
@@ -44,6 +45,7 @@ export function SpectrumDataDisplay({
   overlayMode = 'stacked',
   distributedGap = 40,
   normalizeY = false,
+  displayYUnits = 'transmittance',
   tool = 'zoom',
   activeSpectrumId = null,
   showWavenumbersInLabels = true,
@@ -68,7 +70,8 @@ export function SpectrumDataDisplay({
 
   const layoutResult = useMemo(() => {
     const prepareData = (s) => {
-      let y = s.data.y.slice()
+      const rawY = getDisplayY(s.data.y, s.data.yUnits, displayYUnits)
+      let y = rawY.slice()
       if (normalizeY) {
         const minY = Math.min(...y)
         const maxY = Math.max(...y)
@@ -317,7 +320,7 @@ export function SpectrumDataDisplay({
       regions: regionsRaw,
       peakMarkers: individualRaw,
     }
-  }, [visible, width, height, wavenumberMin, wavenumberMax, plotW, overlayMode, distributedGap, normalizeY, showWavenumbersInLabels, yMinOffset])
+  }, [visible, width, height, wavenumberMin, wavenumberMax, plotW, overlayMode, distributedGap, normalizeY, displayYUnits, showWavenumbersInLabels, yMinOffset])
 
   const { labelsTop, totalHeight, plotRect, plotH, peakMarkers, peakGroupBrackets, regions } = layoutResult
 
@@ -328,7 +331,8 @@ export function SpectrumDataDisplay({
   const { paths } = useMemo(() => {
     const result = []
     const prepareData = (spec) => {
-      let y = spec.data.y.slice()
+      const rawY = getDisplayY(spec.data.y, spec.data.yUnits, displayYUnits)
+      let y = rawY.slice()
       if (normalizeY) {
         const minY = Math.min(...y)
         const maxY = Math.max(...y)
@@ -467,7 +471,7 @@ export function SpectrumDataDisplay({
       return { v, y }
     })
     return { xTickEls, yTickEls, yMin, yMax }
-  }, [wavenumberMin, wavenumberMax, plotW, plotH, overlayMode, visible, normalizeY, labelsTop, yMinOffset])
+  }, [wavenumberMin, wavenumberMax, plotW, plotH, overlayMode, visible, normalizeY, displayYUnits, labelsTop, yMinOffset])
 
   const axisY = labelsTop + plotH
 
@@ -507,7 +511,7 @@ export function SpectrumDataDisplay({
           </g>
         ))}
         <text x={PAD_LEFT + plotW / 2} y={height - 4} textAnchor="middle" className="spectrum-axis-title">Wavenumber (cm⁻¹)</text>
-        <text x={12} y={labelsTop + plotH / 2} textAnchor="middle" className="spectrum-axis-title" transform={`rotate(-90, 12, ${labelsTop + plotH / 2})`}>Transmittance</text>
+        <text x={12} y={labelsTop + plotH / 2} textAnchor="middle" className="spectrum-axis-title" transform={`rotate(-90, 12, ${labelsTop + plotH / 2})`}>{displayYUnits === 'absorbance' ? 'Absorbance' : 'Transmittance'}</text>
       </g>
       <g clipPath="url(#plot-clip)">
       <g className="region-shading-layer">

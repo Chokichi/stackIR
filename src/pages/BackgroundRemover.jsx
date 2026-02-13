@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useStacking } from '../context/StackingContext'
+import { HelpModal, HelpIcon } from '../components/HelpModal'
 import { useBackgroundRemover } from '../context/BackgroundRemoverContext'
 import {
   hexToRgb,
@@ -43,6 +44,7 @@ export default function BackgroundRemover() {
     setError,
     handleClear,
   } = useBackgroundRemover()
+  const [helpModalOpen, setHelpModalOpen] = useState(false)
   const [eyedropperMode, setEyedropperMode] = useState(false)
   const [cropMode, setCropMode] = useState(false)
   const [cropRect, setCropRect] = useState(null)
@@ -346,6 +348,15 @@ export default function BackgroundRemover() {
         <nav className="nav-links">
           <Link to="/" className="nav-link">Spectra Stacking</Link>
           <Link to="/background-remover" className="nav-link active">Background Remover</Link>
+          <button
+            type="button"
+            onClick={() => setHelpModalOpen(true)}
+            className="nav-link help-link"
+            title="Help"
+          >
+            <HelpIcon size={14} />
+            <span>Help</span>
+          </button>
         </nav>
         <h1>Chroma Key Background Remover</h1>
         <p className="subtitle">
@@ -585,6 +596,9 @@ export default function BackgroundRemover() {
 
       <canvas ref={canvasRef} className="offscreen" aria-hidden="true" />
       <canvas ref={originalCanvasRef} className="offscreen" aria-hidden="true" />
+      {helpModalOpen && (
+        <HelpModal open={helpModalOpen} onClose={() => setHelpModalOpen(false)} page="backgroundRemover" />
+      )}
     </div>
   )
 }
