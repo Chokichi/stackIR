@@ -31,6 +31,16 @@ function niceTicks(min, max, maxTicks = 6) {
   return ticks
 }
 
+/** Apply per-spectrum Y scale. In transmittance mode, pin baseline at 1 so only deviation from 1 is scaled (keeps alignment when stacking). */
+function applyScaleY(y, scaleY, displayYUnits) {
+  const s = scaleY ?? 1
+  if (s === 1) return y
+  if (displayYUnits === 'transmittance') {
+    return y.map((v) => 1 + (v - 1) * s)
+  }
+  return y.map((v) => v * s)
+}
+
 /**
  * Renders one or more spectra as SVG paths with smooth interpolation.
  * Data-file-first: no quality loss on zoom.
@@ -78,7 +88,7 @@ export function SpectrumDataDisplay({
         const range = maxY - minY || 1
         y = y.map((v) => (v - minY) / range)
       }
-      return { x: s.data.x, y: y.map((v) => v * (s.scaleY ?? 1)) }
+      return { x: s.data.x, y: applyScaleY(y, s.scaleY, displayYUnits) }
     }
 
     const labelWidth = (labelLen, wavenumberLen, isBracket) => {
@@ -179,7 +189,11 @@ export function SpectrumDataDisplay({
     if (overlayMode === 'stacked') {
       const allY = visible.flatMap((s) => prepareData(s).y)
       const baseMinY = normalizeY ? 0 : Math.min(...allY)
-      const baseMaxY = Math.max(...allY, 1)
+      let baseMaxY = Math.max(...allY, 1)
+      // Add headroom when transmittance exceeds 1 so spectrum lines aren't clipped at top
+      if (!normalizeY && baseMaxY > 1) {
+        baseMaxY = baseMaxY + Math.max(0.02, (baseMaxY - 1) * 0.05)
+      }
       globalDataRange = {
         minX: wavenumberMin,
         maxX: wavenumberMax,
@@ -193,7 +207,10 @@ export function SpectrumDataDisplay({
       for (const s of visible) {
         const scaled = prepareData(s)
         const baseMinY = Math.min(...scaled.y)
-        const baseMaxY = Math.max(...scaled.y, 1)
+        let baseMaxY = Math.max(...scaled.y, 1)
+        if (!normalizeY && baseMaxY > 1) {
+          baseMaxY = baseMaxY + Math.max(0.02, (baseMaxY - 1) * 0.05)
+        }
         specRects[s.id] = {
           rect: { x: PAD_LEFT, y: yOffset, width: plotW, height: specHeight },
           dataRange: {
@@ -339,15 +356,17 @@ export function SpectrumDataDisplay({
         const range = maxY - minY || 1
         y = y.map((v) => (v - minY) / range)
       }
-      const scaleY = spec.scaleY ?? 1
-      y = y.map((v) => v * scaleY)
+      y = applyScaleY(y, spec.scaleY, displayYUnits)
       return { x: spec.data.x, y }
     }
     const applyYMinOffset = (minY, maxY) => Math.min(maxY - 0.01, minY + yMinOffset)
     if (overlayMode === 'stacked') {
       const allY = visible.flatMap((s) => prepareData(s).y)
       const globalMinY = normalizeY ? 0 : Math.min(...allY)
-      const globalMaxY = Math.max(...allY, 1)
+      let globalMaxY = Math.max(...allY, 1)
+      if (!normalizeY && globalMaxY > 1) {
+        globalMaxY = globalMaxY + Math.max(0.02, (globalMaxY - 1) * 0.05)
+      }
       const dataRange = {
         minX: wavenumberMin,
         maxX: wavenumberMax,
@@ -382,7 +401,10 @@ export function SpectrumDataDisplay({
       const spec = visible[i]
       const scaledData = prepareData(spec)
       const baseMinY = Math.min(...scaledData.y)
-      const maxY = Math.max(...scaledData.y) || 1
+      let maxY = Math.max(...scaledData.y) || 1
+      if (!normalizeY && maxY > 1) {
+        maxY = maxY + Math.max(0.02, (maxY - 1) * 0.05)
+      }
       const rect = { x: PAD_LEFT, y: yOffset, width: plotW, height: specHeight }
       const dataRange = {
         minX: wavenumberMin,
@@ -436,30 +458,45 @@ export function SpectrumDataDisplay({
   }, [dragSelect, wavenumberMin, wavenumberMax, plotW, plotH, tool, labelsTop])
 
   const axes = useMemo(() => {
-    const xTicks = niceTicks(wavenumberMin, wavenumberMax).filter(
-      (w) => w >= wavenumberMin - 0.001 && w <= wavenumberMax + 0.001
-    )
-    const xTickEls = xTicks.map((w) => {
+    const MAJOR_STEP = 500
+    const MINOR_STEP = 100
+    const majorTicks = []
+    for (let w = Math.ceil(wavenumberMin / MAJOR_STEP) * MAJOR_STEP; w <= wavenumberMax + 0.001; w += MAJOR_STEP) {
+      if (w >= wavenumberMin - 0.001) majorTicks.push(w)
+    }
+    const minorTicks = []
+    for (let w = Math.ceil(wavenumberMin / MINOR_STEP) * MINOR_STEP; w <= wavenumberMax + 0.001; w += MINOR_STEP) {
+      if (w >= wavenumberMin - 0.001 && w % MAJOR_STEP !== 0) minorTicks.push(w)
+    }
+    const xTickEls = majorTicks.map((w) => {
       const norm = wavenumberToNormX(w, wavenumberMin, wavenumberMax)
       const x = PAD_LEFT + norm * plotW
       return { w, x }
+    })
+    const xMinorTickEls = minorTicks.map((w) => {
+      const norm = wavenumberToNormX(w, wavenumberMin, wavenumberMax)
+      return PAD_LEFT + norm * plotW
     })
     let yMin = 0
     let yMax = 1
     if (overlayMode === 'stacked' && visible.length > 0) {
       const prepareData = (spec) => {
-        let y = spec.data.y.slice()
+        const rawY = getDisplayY(spec.data.y, spec.data.yUnits, displayYUnits)
+        let y = rawY.slice()
         if (normalizeY) {
           const mn = Math.min(...y)
           const mx = Math.max(...y)
           const r = mx - mn || 1
           y = y.map((v) => (v - mn) / r)
         }
-        return y.map((v) => v * (spec.scaleY ?? 1))
+        return applyScaleY(y, spec.scaleY, displayYUnits)
       }
       const allY = visible.flatMap(prepareData)
       const baseMinY = normalizeY ? 0 : Math.min(...allY)
-      const baseMaxY = Math.max(...allY, 1)
+      let baseMaxY = Math.max(...allY, 1)
+      if (!normalizeY && baseMaxY > 1) {
+        baseMaxY = baseMaxY + Math.max(0.02, (baseMaxY - 1) * 0.05)
+      }
       yMin = Math.min(baseMaxY - 0.01, baseMinY + yMinOffset)
       yMax = baseMaxY
     }
@@ -470,7 +507,7 @@ export function SpectrumDataDisplay({
       const y = labelsTop + (1 - norm) * plotH
       return { v, y }
     })
-    return { xTickEls, yTickEls, yMin, yMax }
+    return { xTickEls, xMinorTickEls, yTickEls, yMin, yMax }
   }, [wavenumberMin, wavenumberMax, plotW, plotH, overlayMode, visible, normalizeY, displayYUnits, labelsTop, yMinOffset])
 
   const axisY = labelsTop + plotH
@@ -489,6 +526,7 @@ export function SpectrumDataDisplay({
         <style>{`
           .spectrum-axis { stroke: #555; stroke-width: 1; fill: none; }
           .spectrum-axis-tick { stroke: #555; stroke-width: 1; }
+          .spectrum-axis-tick-minor { stroke: #888; stroke-width: 1; }
           .spectrum-axis-label { fill: #333; font: 12px system-ui, sans-serif; user-select: none; }
           .spectrum-axis-title { fill: #444; font: 11px system-ui, sans-serif; font-weight: 500; user-select: none; }
         `}</style>
@@ -496,6 +534,9 @@ export function SpectrumDataDisplay({
       <g className="axes">
         <line x1={PAD_LEFT} y1={labelsTop} x2={PAD_LEFT} y2={axisY} className="spectrum-axis" />
         <line x1={PAD_LEFT} y1={axisY} x2={PAD_LEFT + plotW} y2={axisY} className="spectrum-axis" />
+        {axes.xMinorTickEls.map((x, i) => (
+          <line key={`minor-${i}`} x1={x} y1={axisY} x2={x} y2={axisY + 3} className="spectrum-axis-tick-minor" />
+        ))}
         {axes.xTickEls.map(({ w, x }) => (
           <g key={w}>
             <line x1={x} y1={axisY} x2={x} y2={axisY + 6} className="spectrum-axis-tick" />
