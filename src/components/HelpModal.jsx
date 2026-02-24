@@ -15,7 +15,7 @@ const HELP_CONTENT = {
       {
         title: 'Getting started',
         items: [
-          { term: 'Sample library', desc: 'Load pre-loaded IR spectra from the library. Click Add or double-click a row.' },
+          { term: 'Sample library', desc: 'Load pre-loaded IR spectra. Search by name, CAS No, or functional group; sort by Name, CAS, or Functional groups. Click Add or double-click a row.' },
           { term: 'Add JCAMP-DX file', desc: 'Load your own spectra. Supports .jdx, .jcamp, and .dx files.' },
         ],
       },

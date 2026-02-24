@@ -1,4 +1,5 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { jsPDF } from 'jspdf'
 import { useStacking } from '../context/StackingContext'
@@ -528,7 +529,33 @@ function SettingsModal({
   )
 }
 
+function InfoIcon({ size = 14 }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <path d="M12 16v-4M12 8h.01" />
+    </svg>
+  )
+}
+
 function SampleLibraryModal({ onAddSpectrum, onClose }) {
+  const [searchQuery, setSearchQuery] = useState('')
+  const [sortBy, setSortBy] = useState('name')
+  const [infoOpenId, setInfoOpenId] = useState(null)
+  const [popoverPosition, setPopoverPosition] = useState('below')
+  const [popoverAnchorRect, setPopoverAnchorRect] = useState(null)
+  const listRef = useRef(null)
+
+  useEffect(() => {
+    if (!infoOpenId) return
+    const onDocClick = () => {
+      setInfoOpenId(null)
+      setPopoverAnchorRect(null)
+    }
+    document.addEventListener('click', onDocClick)
+    return () => document.removeEventListener('click', onDocClick)
+  }, [infoOpenId])
+
   const handleAdd = useCallback((sample) => {
     try {
       const parsed = parseJDX(sample.jdxContent)
@@ -548,20 +575,117 @@ function SampleLibraryModal({ onAddSpectrum, onClose }) {
     }
   }, [onAddSpectrum, onClose])
 
+  const filteredAndSorted = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    let list = SAMPLE_SPECTRA
+    if (q) {
+      list = list.filter((s) => {
+        const nameMatch = s.name?.toLowerCase().includes(q)
+        const namesMatch = s.names?.toLowerCase().includes(q)
+        const casMatch = s.casNumber?.toLowerCase().includes(q)
+        const fgMatch = (s.functionalGroups ?? []).some((g) => g.toLowerCase().includes(q))
+        return nameMatch || namesMatch || casMatch || fgMatch
+      })
+    }
+    return [...list].sort((a, b) => {
+      if (sortBy === 'name') return (a.name ?? '').localeCompare(b.name ?? '')
+      if (sortBy === 'cas') return (a.casNumber ?? '').localeCompare(b.casNumber ?? '')
+      if (sortBy === 'functionalGroups') {
+        const aFg = (a.functionalGroups ?? []).join(', ')
+        const bFg = (b.functionalGroups ?? []).join(', ')
+        return aFg.localeCompare(bFg)
+      }
+      return 0
+    })
+  }, [searchQuery, sortBy])
+
+  const infoOpenSample = useMemo(
+    () => (infoOpenId ? filteredAndSorted.find((s) => s.id === infoOpenId) : null),
+    [infoOpenId, filteredAndSorted]
+  )
+
+  const popoverStyle = infoOpenSample && popoverAnchorRect
+    ? {
+        position: 'fixed',
+        right: window.innerWidth - popoverAnchorRect.right,
+        ...(popoverPosition === 'below'
+          ? { top: popoverAnchorRect.bottom + 4 }
+          : { bottom: window.innerHeight - popoverAnchorRect.top + 4 }),
+        zIndex: 1000,
+      }
+    : null
+
   return (
+    <>
+      {infoOpenSample && popoverAnchorRect &&
+        createPortal(
+          <div
+            className="sample-library-info-popover sample-library-info-popover--portal"
+            style={popoverStyle}
+            role="tooltip"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="sample-library-info-content">
+              {infoOpenSample.owner && (
+                <p><strong>OWNER</strong><br />{infoOpenSample.owner}</p>
+              )}
+              {infoOpenSample.origin && (
+                <p><strong>ORIGIN</strong><br />{infoOpenSample.origin}</p>
+              )}
+              {infoOpenSample.citation && (
+                <p><strong>CITATION</strong><br />{infoOpenSample.citation}</p>
+              )}
+              {!infoOpenSample.owner && !infoOpenSample.origin && !infoOpenSample.citation && (
+                <p className="sample-library-info-empty">No reference information available.</p>
+              )}
+            </div>
+            <button
+              type="button"
+              className="ghost small sample-library-info-close"
+              onClick={(e) => {
+                e.stopPropagation()
+                setInfoOpenId(null)
+                setPopoverAnchorRect(null)
+              }}
+              aria-label="Close"
+            >
+              ×
+            </button>
+          </div>,
+          document.body
+        )}
     <div className="sample-library-modal-overlay" onClick={onClose}>
       <div className="sample-library-modal" onClick={(e) => e.stopPropagation()}>
         <div className="sample-library-header">
           <h3>Sample spectra library</h3>
           <button type="button" onClick={onClose} className="ghost small sample-library-close" aria-label="Close">×</button>
         </div>
-        <div className="sample-library-list">
+        <div className="sample-library-toolbar">
+          <input
+            type="search"
+            placeholder="Search by name, CAS No, or functional group..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="sample-library-search"
+            aria-label="Search spectra"
+          />
+          <label className="sample-library-sort">
+            <span>Sort by</span>
+            <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} aria-label="Sort by">
+              <option value="name">Name</option>
+              <option value="cas">CAS Registry No</option>
+              <option value="functionalGroups">Functional groups</option>
+            </select>
+          </label>
+        </div>
+        <div ref={listRef} className="sample-library-list">
           <div className="sample-library-list-header">
             <span className="sample-library-col-name">Name</span>
-            <span className="sample-library-col-cas">CAS Registry No</span>
+            <span className="sample-library-col-fg">Functional groups</span>
+            <span className="sample-library-col-cas">CAS No</span>
             <span className="sample-library-col-action" />
           </div>
-          {SAMPLE_SPECTRA.map((sample) => (
+          {filteredAndSorted.map((sample) => (
             <div
               key={sample.id}
               className="sample-library-row"
@@ -571,21 +695,55 @@ function SampleLibraryModal({ onAddSpectrum, onClose }) {
                 <span className="sample-library-icon" aria-hidden>📄</span>
                 {sample.name}
               </span>
+              <span className="sample-library-col-fg">{(sample.functionalGroups ?? []).join(', ') || '—'}</span>
               <span className="sample-library-col-cas">{sample.casNumber}</span>
               <span className="sample-library-col-action">
-                <button type="button" className="primary small" onClick={() => handleAdd(sample)}>
-                  Add
-                </button>
+                <div className="sample-library-row-actions">
+                  <button
+                    type="button"
+                    className="ghost small sample-library-info-btn"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      e.preventDefault()
+                      const nextId = infoOpenId === sample.id ? null : sample.id
+                      if (nextId && listRef.current) {
+                        const btnRect = e.currentTarget.getBoundingClientRect()
+                        const listRect = listRef.current.getBoundingClientRect()
+                        const spaceAbove = btnRect.top - listRect.top
+                        const spaceBelow = listRect.bottom - btnRect.bottom
+                        setPopoverPosition(spaceAbove >= spaceBelow ? 'above' : 'below')
+                        setPopoverAnchorRect(btnRect)
+                      } else {
+                        setPopoverAnchorRect(null)
+                      }
+                      setInfoOpenId(nextId)
+                    }}
+                    title="Reference information"
+                    aria-label="Reference information"
+                  >
+                    <InfoIcon size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className="primary small"
+                    onClick={(e) => { e.stopPropagation(); handleAdd(sample) }}
+                  >
+                    Add
+                  </button>
+                </div>
               </span>
             </div>
           ))}
         </div>
         <div className="sample-library-footer">
-          <span className="sample-library-hint">Double-click or click Add to load spectrum</span>
+          <span className="sample-library-hint">
+            {filteredAndSorted.length} spectrum{filteredAndSorted.length !== 1 ? 's' : ''}. Double-click or click Add to load.
+          </span>
           <button type="button" onClick={onClose} className="secondary">Close</button>
         </div>
       </div>
     </div>
+    </>
   )
 }
 
