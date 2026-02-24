@@ -5,9 +5,15 @@
  *
  * JCAMP-DX uses ##YUNITS= to specify the Y-axis units.
  * We match against the standard values explicitly.
+ *
+ * X-axis: IR spectra use wavenumber (1/CM) or wavelength (MICROMETERS, NANOMETERS).
+ * Wavenumber (cm⁻¹) = 10,000 / wavelength (μm) = 10,000,000 / wavelength (nm).
  */
 
 const ABSORBANCE_VALUES = ['ABSORBANCE']
+const XUNITS_WAVENUMBER = ['1/CM', 'CM^-1', 'CM-1', 'WAVENUMBERS']
+const XUNITS_MICROMETERS = ['MICROMETERS', 'MICROMETER', 'MICRONS', 'UM']
+const XUNITS_NANOMETERS = ['NANOMETERS', 'NANOMETER', 'NM']
 const TRANSMITTANCE_VALUES = ['TRANSMITTANCE', 'TRANSMISSION', '% TRANSMITTANCE', '% TRANSMISSION']
 
 function normalizeUnits(s) {
@@ -59,4 +65,44 @@ export function getDisplayY(y, dataYUnits, displayUnits) {
   if (!dataIsA && !wantA) return [...y]
   if (dataIsA && !wantA) return y.map(absorbanceToTransmittance)
   return y.map((v) => transmittanceToAbsorbance(v > 1 ? v / 100 : v))
+}
+
+/** Check if xUnits denotes wavenumber (1/cm). */
+export function isWavenumber(xUnits) {
+  const u = normalizeUnits(xUnits)
+  if (!u) return true
+  return matchesOneOf(u, XUNITS_WAVENUMBER)
+}
+
+/** Check if xUnits denotes wavelength in micrometers. */
+export function isMicrometers(xUnits) {
+  const u = normalizeUnits(xUnits)
+  return matchesOneOf(u, XUNITS_MICROMETERS)
+}
+
+/** Check if xUnits denotes wavelength in nanometers. */
+export function isNanometers(xUnits) {
+  const u = normalizeUnits(xUnits)
+  return matchesOneOf(u, XUNITS_NANOMETERS)
+}
+
+/**
+ * Convert x-axis values to wavenumber (cm⁻¹) when stored as wavelength.
+ * @param {number[]} x - raw x values (wavelength or wavenumber)
+ * @param {string} xUnits - e.g. '1/CM', 'MICROMETERS', 'NANOMETERS'
+ * @returns {{ x: number[], xUnits: string }} x in wavenumbers, xUnits set to '1/CM'
+ */
+export function xToWavenumbers(x, xUnits) {
+  if (!x?.length) return { x: [], xUnits: '1/CM' }
+  const u = normalizeUnits(xUnits)
+  if (matchesOneOf(u, XUNITS_WAVENUMBER)) return { x: [...x], xUnits: '1/CM' }
+  if (matchesOneOf(u, XUNITS_MICROMETERS)) {
+    const out = x.map((v) => (v > 0 ? 10000 / v : 0))
+    return { x: out, xUnits: '1/CM' }
+  }
+  if (matchesOneOf(u, XUNITS_NANOMETERS)) {
+    const out = x.map((v) => (v > 0 ? 1e7 / v : 0))
+    return { x: out, xUnits: '1/CM' }
+  }
+  return { x: [...x], xUnits: xUnits || '1/CM' }
 }
