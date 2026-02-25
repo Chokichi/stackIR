@@ -9,6 +9,7 @@ import {
   resampleImageToWavenumberSpace,
 } from '../utils/imageUtils'
 import { parseJDX } from '../utils/jdxParser'
+import { parseJcampForEditing } from '../utils/jcampEditorUtils'
 import { normXToWavenumber, findLocalMinima, findLocalMaxima } from '../utils/spectrumPath'
 import { isAbsorbance, getDisplayY } from '../utils/spectrumUnits'
 import { SpectrumDataDisplay } from '../components/SpectrumDataDisplay'
@@ -274,7 +275,7 @@ function CalibrationModal({
   }, [drag, clientToImgCoords, onCalibrationClick])
 
   return (
-    <div className="calibration-modal">
+    <div className="modal-overlay calibration-modal">
       <div className="calibration-modal-content">
         <div className="calibration-bg-row">
           <label>Background:</label>
@@ -404,7 +405,7 @@ function ExportModal({
 }) {
   if (!open) return null
   return (
-    <div className="export-modal-overlay" onClick={onClose}>
+    <div className="modal-overlay export-modal-overlay" onClick={onClose}>
       <div className="export-modal" onClick={(e) => e.stopPropagation()}>
         <div className="export-modal-header">
           <h3>Export spectra</h3>
@@ -462,7 +463,7 @@ function SettingsModal({
 }) {
   if (!open) return null
   return (
-    <div className="settings-modal-overlay" onClick={onClose}>
+    <div className="modal-overlay settings-modal-overlay" onClick={onClose}>
       <div className="settings-modal" onClick={(e) => e.stopPropagation()}>
         <div className="settings-modal-header">
           <h3>Settings</h3>
@@ -521,8 +522,40 @@ function SettingsModal({
             </Link>
           </div>
         </div>
+        <div className="settings-modal-footer" style={{ borderTop: 'none' }}>
+          <button type="button" onClick={onClose} className="primary small">Done</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SpectrumMetadataModal({ open, onClose, spectrum }) {
+  if (!open || !spectrum) return null
+  const meta = spectrum.jdxMetadata ?? []
+  return (
+    <div className="modal-overlay settings-modal-overlay" onClick={onClose}>
+      <div className="settings-modal spectrum-info-modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 480 }}>
+        <div className="settings-modal-header">
+          <h3>{spectrum.fileName || 'Spectrum'} — JCAMP-DX metadata</h3>
+          <button type="button" onClick={onClose} className="ghost small settings-modal-close" aria-label="Close">×</button>
+        </div>
+        <div className="settings-modal-body spectrum-info-modal-body">
+          {meta.length === 0 ? (
+            <p className="settings-modal-hint">No metadata available for this spectrum.</p>
+          ) : (
+            <dl className="spectrum-info-metadata-list">
+              {meta.map(({ key, value }) => (
+                <div key={key} className="spectrum-info-metadata-row">
+                  <dt>{key}</dt>
+                  <dd>{value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+        </div>
         <div className="settings-modal-footer">
-          <button type="button" onClick={onClose} className="primary">Done</button>
+          <button type="button" onClick={onClose} className="primary small">Done</button>
         </div>
       </div>
     </div>
@@ -568,6 +601,8 @@ function SampleLibraryModal({ onAddSpectrum, onClose }) {
     try {
       const parsed = parseJDX(sample.jdxContent)
       if (!parsed.x?.length || !parsed.y?.length) return
+      const { headerEntries } = parseJcampForEditing(sample.jdxContent)
+      const jdxMetadata = headerEntries.filter((e) => e.type === 'metadata').map((e) => ({ key: e.key, value: e.value }))
       onAddSpectrum({
         data: { x: parsed.x, y: parsed.y, yUnits: parsed.yUnits },
         fileName: sample.name,
@@ -576,6 +611,7 @@ function SampleLibraryModal({ onAddSpectrum, onClose }) {
           maxWavenumber: parsed.maxWavenumber,
           piecewiseAt: 2000,
         },
+        jdxMetadata,
       })
       onClose()
     } catch (err) {
@@ -662,7 +698,7 @@ function SampleLibraryModal({ onAddSpectrum, onClose }) {
           </div>,
           document.body
         )}
-    <div className="sample-library-modal-overlay" onClick={onClose}>
+    <div className="modal-overlay sample-library-modal-overlay" onClick={onClose}>
       <div className="sample-library-modal" onClick={(e) => e.stopPropagation()}>
         <div className="sample-library-header">
           <h3>Sample spectra library</h3>
@@ -775,6 +811,7 @@ export default function StackingView() {
   } = useStacking()
   const [calibrationMode, setCalibrationMode] = useState(null)
   const [expandedAdjustId, setExpandedAdjustId] = useState(null)
+  const [spectrumInfoId, setSpectrumInfoId] = useState(null)
   const [scaledImages, setScaledImages] = useState({})
   const [zoomRange, setZoomRange] = useState(null)
   const [dragSelect, setDragSelect] = useState(null)
@@ -1540,6 +1577,8 @@ export default function StackingView() {
           setJdxError('No spectral data found in file')
           return
         }
+        const { headerEntries } = parseJcampForEditing(text)
+        const jdxMetadata = headerEntries.filter((e) => e.type === 'metadata').map((e) => ({ key: e.key, value: e.value }))
         const baseName = file.name.replace(/\.(jdx|jcamp|dx)$/i, '')
         const fileName = parsed.title || baseName || file.name
         addSpectrum({
@@ -1550,6 +1589,7 @@ export default function StackingView() {
             maxWavenumber: parsed.maxWavenumber,
             piecewiseAt: 2000,
           },
+          jdxMetadata,
         })
       } catch (err) {
         setJdxError(err.message || 'Failed to parse JCAMP-DX file')
@@ -2022,7 +2062,16 @@ export default function StackingView() {
               <div className="spectrum-meta">
                 {s.data || s.jdxWavenumberRange ? (
                   <>
-                    <span className="hint">{s.data ? 'Data (vector)' : 'JDX (auto-calibrated)'}</span>
+                    {s.jdxWavenumberRange && !s.data && <span className="hint">JDX (auto-calibrated)</span>}
+                    <button
+                      type="button"
+                      className="ghost small spectrum-icon-btn"
+                      onClick={() => setSpectrumInfoId(s.id)}
+                      title="View JCAMP-DX metadata"
+                      aria-label="View metadata"
+                    >
+                      <InfoIcon size={14} />
+                    </button>
                     <button
                       type="button"
                       className="ghost small"
@@ -2404,6 +2453,11 @@ export default function StackingView() {
         setShowWavenumbersInLabels={setShowWavenumbersInLabels}
         displayYUnits={displayYUnits}
         setDisplayYUnits={setDisplayYUnits}
+      />
+      <SpectrumMetadataModal
+        open={spectrumInfoId != null}
+        onClose={() => setSpectrumInfoId(null)}
+        spectrum={spectra.find((s) => s.id === spectrumInfoId) ?? null}
       />
       <ExportModal
         open={exportModalOpen}

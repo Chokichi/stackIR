@@ -130,7 +130,7 @@ export function HelpModal({ open, onClose, page = 'stacking' }) {
   const content = HELP_CONTENT[page] || HELP_CONTENT.stacking
 
   return (
-    <div className="help-modal-overlay" onClick={onClose}>
+    <div className="modal-overlay help-modal-overlay" onClick={onClose}>
       <div className="help-modal" onClick={(e) => e.stopPropagation()}>
         <div className="help-modal-header">
           <h2>Help — {content.title}</h2>

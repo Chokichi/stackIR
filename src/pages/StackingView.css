@@ -698,25 +698,9 @@
   margin-top: auto;
 }
 
-.calibration-modal {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 200;
-}
-
-.settings-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 200;
-}
+/* Overlays use .modal-overlay (see index.css). Opacity: --modal-overlay-opacity */
+.calibration-modal { }
+.settings-modal-overlay { }
 
 .settings-modal {
   background: var(--panel, #fff);
@@ -811,6 +795,43 @@
   border-top: 1px solid var(--border, #ddd);
 }
 
+.spectrum-info-modal-body {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.spectrum-info-metadata-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.spectrum-info-metadata-row {
+  display: grid;
+  grid-template-columns: 10em 1fr;
+  gap: 0.5rem 1rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--border, #eee);
+  font-size: 0.8125rem;
+}
+
+.spectrum-info-metadata-row:last-child {
+  border-bottom: none;
+}
+
+.spectrum-info-metadata-row dt {
+  margin: 0;
+  font-weight: 500;
+  color: var(--subtitle, #555);
+  word-break: break-word;
+}
+
+.spectrum-info-metadata-row dd {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .reference-scale-bar {
   display: flex;
   align-items: center;
@@ -857,15 +878,7 @@
   line-height: 1;
 }
 
-.export-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 200;
-}
+.export-modal-overlay { }
 
 .export-modal {
   background: var(--panel, #fff);
@@ -935,15 +948,7 @@
   border-top: 1px solid var(--border, #ddd);
 }
 
-.sample-library-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 200;
-}
+.sample-library-modal-overlay { }
 
 .sample-library-modal {
   background: #252930;

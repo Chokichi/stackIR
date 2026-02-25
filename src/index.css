@@ -17,6 +17,9 @@
   --error: #ff6b6b;
   --error-bg: rgba(255, 107, 107, 0.12);
 
+  /* Modal overlay: change this to adjust backdrop opacity for all modals (0 = transparent, 1 = solid) */
+  --modal-overlay-opacity: 0.90;
+
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -91,4 +94,15 @@ button:focus-visible {
   button {
     background-color: #f9f9f9;
   }
+}
+
+/* Standard modal overlay: fixed full-screen backdrop, centered content. Opacity controlled by --modal-overlay-opacity. */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / var(--modal-overlay-opacity));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
 }
