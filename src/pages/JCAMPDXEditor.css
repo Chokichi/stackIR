@@ -2,6 +2,78 @@
   max-width: 900px;
 }
 
+.jcamp-editor--group-mode {
+  --accent: #c43d3d;
+  --accent-hover: #d65555;
+  --accent-muted: rgba(196, 61, 61, 0.25);
+}
+
+.jcamp-editor--group-mode .primary,
+.jcamp-editor--group-mode button.primary {
+  background: var(--accent);
+}
+
+.jcamp-editor--group-mode .primary:hover,
+.jcamp-editor--group-mode button.primary:hover {
+  background: var(--accent-hover);
+}
+
+.jcamp-editor--group-mode .jcamp-metadata-section,
+.jcamp-editor--group-mode .jcamp-data-section {
+  border-color: rgba(196, 61, 61, 0.4);
+}
+
+.jcamp-editor--group-mode .jcamp-mode-tab.active {
+  background: var(--accent-muted);
+  color: var(--accent);
+}
+
+.jcamp-mode-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.jcamp-mode-tab {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.875rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--subtitle);
+}
+
+.jcamp-mode-tab:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: inherit;
+}
+
+.jcamp-mode-tab.active {
+  background: rgba(59, 130, 246, 0.2);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.jcamp-file-selector select {
+  padding: 0.4rem 0.75rem;
+  font-size: 0.875rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+  color: inherit;
+}
+
+.jcamp-apply-message {
+  padding: 0.5rem 0.75rem;
+  margin-bottom: 1rem;
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+  border-radius: 6px;
+  font-size: 0.875rem;
+}
+
 /* Allow JCAMP editor page to scroll on smaller viewports (App.css uses overflow:hidden) */
 @media (max-width: 900px) {
   .app.jcamp-editor {

@@ -93,6 +93,45 @@ const SPECTRUM_COLORS = [
   '#006064', '#bf360c', '#311b92', '#33691e', '#4e342e',
 ]
 
+const LEGEND_ROW_HEIGHT = 18
+const LEGEND_SWATCH_SIZE = 12
+const LEGEND_PADDING = 16
+const LEGEND_RIGHT_PAD = 16
+
+/** Create SVG legend group (color swatch + name per spectrum), positioned bottom-right. Returns { g, height }. */
+function createExportLegend(visibleDataSpectra, spectra, baseY, svgWidth = 800) {
+  const ns = 'http://www.w3.org/2000/svg'
+  const g = document.createElementNS(ns, 'g')
+  g.setAttribute('class', 'export-legend')
+  if (visibleDataSpectra.length === 0) return { g, height: 0 }
+  const legendWidth = LEGEND_SWATCH_SIZE + 6 + 180
+  const legendX = svgWidth - LEGEND_RIGHT_PAD - legendWidth
+  const legendTop = baseY + LEGEND_PADDING
+  const height = visibleDataSpectra.length * LEGEND_ROW_HEIGHT + LEGEND_PADDING * 2
+  visibleDataSpectra.forEach((spec, i) => {
+    const color = SPECTRUM_COLORS[spectra.findIndex((s) => s.id === spec.id) % SPECTRUM_COLORS.length]
+    const rowY = legendTop + i * LEGEND_ROW_HEIGHT + LEGEND_ROW_HEIGHT / 2
+    const rect = document.createElementNS(ns, 'rect')
+    rect.setAttribute('x', legendX)
+    rect.setAttribute('y', rowY - LEGEND_SWATCH_SIZE / 2)
+    rect.setAttribute('width', LEGEND_SWATCH_SIZE)
+    rect.setAttribute('height', LEGEND_SWATCH_SIZE)
+    rect.setAttribute('fill', color)
+    rect.setAttribute('stroke', '#555')
+    rect.setAttribute('stroke-width', '1')
+    const t = document.createElementNS(ns, 'text')
+    t.setAttribute('x', legendX + LEGEND_SWATCH_SIZE + 6)
+    t.setAttribute('y', rowY + 4)
+    t.setAttribute('font-size', '12')
+    t.setAttribute('font-family', 'system-ui, sans-serif')
+    t.setAttribute('fill', '#333')
+    t.textContent = spec.fileName || `Spectrum ${i + 1}`
+    g.appendChild(rect)
+    g.appendChild(t)
+  })
+  return { g, height }
+}
+
 function CalibrationModal({
   calibrationMode,
   spectra,
@@ -351,6 +390,47 @@ function CalibrationModal({
   )
 }
 
+/** Build export SVG (chart + legend + optional list), return blob URL for preview. Returns null if not data-only or SVG not found. */
+function buildExportSvgBlobUrl(displayWrapRef, spectra, visibleIds, displayHeight, includeList) {
+  const wrap = displayWrapRef?.current
+  const svg = wrap?.querySelector('.spectrum-data-display')
+  if (!svg) return null
+  const visibleDataSpectra = spectra.filter((s) => visibleIds.has(s.id) && s.data)
+  if (visibleDataSpectra.length === 0) return null
+  const listText = buildPeakRegionList(spectra, visibleIds)
+  const origHeight = parseInt(svg.getAttribute('height') || displayHeight, 10)
+  const { g: legendG, height: legendHeight } = createExportLegend(visibleDataSpectra, spectra, origHeight, 800)
+  const listHeight = includeList && listText.trim() ? Math.min(listText.split('\n').length * 18 + 60, 400) : 0
+  const extraHeight = Math.max(listHeight, legendHeight)
+  const totalHeight = displayHeight + extraHeight
+
+  const svgClone = svg.cloneNode(true)
+  svgClone.setAttribute('width', '800')
+  svgClone.setAttribute('height', String(totalHeight))
+  svgClone.setAttribute('viewBox', `0 0 800 ${totalHeight}`)
+  svgClone.setAttribute('style', 'background:#fff;display:block')
+  if (includeList && listText.trim()) {
+    const listG = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+    listG.setAttribute('transform', `translate(52, ${displayHeight + 24})`)
+    listText.split('\n').forEach((line, i) => {
+      const t = document.createElementNS('http://www.w3.org/2000/svg', 'text')
+      t.setAttribute('x', '0')
+      t.setAttribute('y', String(i * 18))
+      t.setAttribute('font-size', '12')
+      t.setAttribute('font-family', 'system-ui, sans-serif')
+      t.setAttribute('fill', '#333')
+      t.textContent = line
+      listG.appendChild(t)
+    })
+    svgClone.appendChild(listG)
+  }
+  const { g: legendG2 } = createExportLegend(visibleDataSpectra, spectra, displayHeight, 800)
+  svgClone.appendChild(legendG2)
+  const svgStr = new XMLSerializer().serializeToString(svgClone)
+  const blob = new Blob([svgStr], { type: 'image/svg+xml' })
+  return URL.createObjectURL(blob)
+}
+
 function buildPeakRegionList(spectra, visibleIds) {
   const lines = []
   for (const s of spectra) {
@@ -402,28 +482,44 @@ function ExportModal({
   includeList,
   setIncludeList,
   onExport,
+  previewUrl,
+  downloadName,
+  setDownloadName,
 }) {
   if (!open) return null
   return (
     <div className="modal-overlay export-modal-overlay" onClick={onClose}>
-      <div className="export-modal" onClick={(e) => e.stopPropagation()}>
+      <div className="export-modal export-modal-with-preview" onClick={(e) => e.stopPropagation()}>
         <div className="export-modal-header">
           <h3>Export spectra</h3>
           <button type="button" onClick={onClose} className="ghost small export-modal-close" aria-label="Close">×</button>
         </div>
         <div className="export-modal-body">
-          <div className="export-modal-option">
-            <label htmlFor="export-format">Format</label>
-            <select
-              id="export-format"
-              value={format}
-              onChange={(e) => setFormat(e.target.value)}
-              style={{ padding: '0.5rem 0.75rem', borderRadius: 6, width: '100%' }}
-            >
-              {hasDataOnly && <option value="svg">SVG</option>}
-              <option value="png">PNG</option>
-              <option value="pdf">PDF</option>
-            </select>
+          <div className="export-modal-row">
+            <div className="export-modal-option export-modal-filename">
+              <label htmlFor="export-filename">File name</label>
+              <input
+                id="export-filename"
+                type="text"
+                value={downloadName}
+                onChange={(e) => setDownloadName(e.target.value)}
+                placeholder="spectra-stacked"
+                className="export-filename-input"
+              />
+            </div>
+            <div className="export-modal-option export-modal-format">
+              <label htmlFor="export-format">Format</label>
+              <select
+                id="export-format"
+                value={format}
+                onChange={(e) => setFormat(e.target.value)}
+                className="export-format-select"
+              >
+                {hasDataOnly && <option value="svg">SVG</option>}
+                <option value="png">PNG</option>
+                <option value="pdf">PDF</option>
+              </select>
+            </div>
           </div>
           {hasDataOnly && (
             <label className="export-modal-checkbox">
@@ -434,6 +530,14 @@ function ExportModal({
               />
               Include peak/region list (labels and wavenumbers)
             </label>
+          )}
+          {hasDataOnly && previewUrl && (
+            <div className="export-modal-preview-wrap">
+              <label className="export-modal-preview-label">Preview</label>
+              <div className="export-modal-preview">
+                <img src={previewUrl} alt="Export preview" className="export-modal-preview-img" />
+              </div>
+            </div>
           )}
         </div>
         <div className="export-modal-footer">
@@ -1402,6 +1506,31 @@ export default function StackingView() {
   const [downloadFormat, setDownloadFormat] = useState('png')
   const [exportModalOpen, setExportModalOpen] = useState(false)
   const [exportIncludeList, setExportIncludeList] = useState(false)
+  const [exportDownloadName, setExportDownloadName] = useState('spectra-stacked')
+  const [exportPreviewUrl, setExportPreviewUrl] = useState(null)
+
+  useEffect(() => {
+    let lastUrl = null
+    if (!exportModalOpen || !hasDataOnly) {
+      setExportPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev)
+        return null
+      })
+      return
+    }
+    const url = buildExportSvgBlobUrl(
+      displayWrapRef,
+      spectra,
+      visibleIds,
+      displayHeight,
+      exportIncludeList
+    )
+    lastUrl = url
+    if (url) setExportPreviewUrl(url)
+    return () => {
+      if (lastUrl) URL.revokeObjectURL(lastUrl)
+    }
+  }, [exportModalOpen, hasDataOnly, spectra, visibleIds, displayHeight, exportIncludeList])
   const [helpModalOpen, setHelpModalOpen] = useState(false)
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
   const [yMinOffset, setYMinOffset] = useState(0)
@@ -1409,8 +1538,9 @@ export default function StackingView() {
     if (!hasDataOnly && downloadFormat === 'svg') setDownloadFormat('png')
   }, [hasDataOnly, downloadFormat])
 
-  const downloadStacked = useCallback((format = downloadFormat, includeList = false) => {
+  const downloadStacked = useCallback((format = downloadFormat, includeList = false, downloadName = exportDownloadName) => {
     const effectiveFormat = !hasDataOnly && format === 'svg' ? 'png' : format
+    const baseName = (downloadName || 'spectra-stacked').trim().replace(/[/\\:*?"<>|]/g, '-') || 'spectra-stacked'
     const listText = hasDataOnly && includeList ? buildPeakRegionList(spectra, visibleIds) : ''
     const addImageToPdf = (pdf, imgData) => {
       pdf.addImage(imgData, 'PNG', 0, 0, EXPORT_WIDTH_IN, EXPORT_HEIGHT_IN)
@@ -1452,19 +1582,21 @@ export default function StackingView() {
       const svg = wrap?.querySelector('.spectrum-data-display')
       if (!svg) return
 
+      const visibleDataSpectra = spectra.filter((s) => visibleIds.has(s.id) && s.data)
+      const origHeight = parseInt(svg.getAttribute('height') || displayHeight, 10)
+      const { g: legendG, height: legendHeight } = createExportLegend(visibleDataSpectra, spectra, origHeight, 800)
+
       if (effectiveFormat === 'svg') {
-        let svgStr
+        const svgClone = svg.cloneNode(true)
+        const listHeight = includeList && listText.trim() ? listText.split('\n').length * 16 + 40 : 0
+        const extraHeight = Math.max(listHeight, legendHeight)
+        const newHeight = origHeight + extraHeight
+        svgClone.setAttribute('height', String(newHeight))
+        svgClone.setAttribute('viewBox', `0 0 800 ${newHeight}`)
         if (includeList && listText.trim()) {
-          const svgClone = svg.cloneNode(true)
-          const listHeight = listText.split('\n').length * 16 + 40
-          const origHeight = parseInt(svgClone.getAttribute('height') || displayHeight, 10)
-          const newHeight = origHeight + listHeight
-          svgClone.setAttribute('height', String(newHeight))
-          svgClone.setAttribute('viewBox', `0 0 800 ${newHeight}`)
           const listG = document.createElementNS('http://www.w3.org/2000/svg', 'g')
           listG.setAttribute('transform', `translate(52, ${origHeight + 24})`)
-          const lines = listText.split('\n')
-          lines.forEach((line, i) => {
+          listText.split('\n').forEach((line, i) => {
             const t = document.createElementNS('http://www.w3.org/2000/svg', 'text')
             t.setAttribute('x', '0')
             t.setAttribute('y', String(i * 16))
@@ -1475,15 +1607,14 @@ export default function StackingView() {
             listG.appendChild(t)
           })
           svgClone.appendChild(listG)
-          svgStr = new XMLSerializer().serializeToString(svgClone)
-        } else {
-          svgStr = new XMLSerializer().serializeToString(svg)
         }
+        svgClone.appendChild(legendG)
+        const svgStr = new XMLSerializer().serializeToString(svgClone)
         const blob = new Blob([svgStr], { type: 'image/svg+xml' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = 'spectra-stacked.svg'
+        a.download = `${baseName}.svg`
         a.click()
         URL.revokeObjectURL(url)
         return
@@ -1493,8 +1624,10 @@ export default function StackingView() {
       svgClone.setAttribute('width', '800')
       const baseHeight = displayHeight
       const listHeight = includeList && listText.trim() ? Math.min(listText.split('\n').length * 18 + 60, 400) : 0
-      const totalHeight = baseHeight + listHeight
+      const extraHeight = Math.max(listHeight, legendHeight)
+      const totalHeight = baseHeight + extraHeight
       svgClone.setAttribute('height', String(totalHeight))
+      svgClone.setAttribute('viewBox', `0 0 800 ${totalHeight}`)
       svgClone.setAttribute('style', 'background:#fff;display:block')
       if (includeList && listText.trim()) {
         const listG = document.createElementNS('http://www.w3.org/2000/svg', 'g')
@@ -1511,6 +1644,8 @@ export default function StackingView() {
         })
         svgClone.appendChild(listG)
       }
+      const { g: legendG2 } = createExportLegend(visibleDataSpectra, spectra, baseHeight, 800)
+      svgClone.appendChild(legendG2)
       const svgStr = new XMLSerializer().serializeToString(svgClone)
       const blob = new Blob([svgStr], { type: 'image/svg+xml' })
       const url = URL.createObjectURL(blob)
@@ -1532,13 +1667,13 @@ export default function StackingView() {
         if (effectiveFormat === 'png') {
           const a = document.createElement('a')
           a.href = out.toDataURL('image/png')
-          a.download = 'spectra-stacked.png'
+          a.download = `${baseName}.png`
           a.click()
         } else if (effectiveFormat === 'pdf') {
           const pdf = new jsPDF({ orientation: 'landscape', unit: 'in', format: [8.5, 11] })
           addImageToPdf(pdf, out.toDataURL('image/png'))
           addListToPdf(pdf)
-          pdf.save('spectra-stacked.pdf')
+          pdf.save(`${baseName}.pdf`)
         }
       }
       img.src = url
@@ -1549,15 +1684,15 @@ export default function StackingView() {
       if (effectiveFormat === 'png') {
         const a = document.createElement('a')
         a.href = out.toDataURL('image/png')
-        a.download = 'spectra-stacked.png'
+        a.download = `${baseName}.png`
         a.click()
       } else if (effectiveFormat === 'pdf') {
         const pdf = new jsPDF({ orientation: 'landscape', unit: 'in', format: [8.5, 11] })
         addImageToPdf(pdf, out.toDataURL('image/png'))
-        pdf.save('spectra-stacked.pdf')
+        pdf.save(`${baseName}.pdf`)
       }
     }
-  }, [hasDataOnly, downloadFormat, spectra, visibleIds, displayHeight])
+  }, [hasDataOnly, downloadFormat, spectra, visibleIds, displayHeight, exportDownloadName])
 
   const handleAddFromSampleLibrary = useCallback((spectrumData) => {
     setJdxError(null)
@@ -2468,9 +2603,12 @@ export default function StackingView() {
         includeList={exportIncludeList}
         setIncludeList={setExportIncludeList}
         onExport={() => {
-          downloadStacked(downloadFormat, exportIncludeList)
+          downloadStacked(downloadFormat, exportIncludeList, exportDownloadName)
           setExportModalOpen(false)
         }}
+        previewUrl={exportPreviewUrl}
+        downloadName={exportDownloadName}
+        setDownloadName={setExportDownloadName}
       />
       <HelpModal open={helpModalOpen} onClose={() => setHelpModalOpen(false)} page="stacking" />
     </div>
