@@ -29,6 +29,8 @@ const TARGET_WAVENUMBER_MIN = 500
 const TARGET_WAVENUMBER_MAX = 4000
 const TARGET_WIDTH = 800
 const BASE_DISPLAY_HEIGHT = 475
+/** Max Y scale for spectrum (1 = 100%). */
+const Y_SCALE_MAX = 10
 
 const EyeIcon = ({ visible = true, size = 14 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2249,6 +2251,14 @@ export default function StackingView() {
               </div>
               {expandedAdjustId === s.id && (
                 <div className="spectrum-adjust">
+                  <button
+                    type="button"
+                    className="ghost small"
+                    style={{ marginBottom: '0.5rem' }}
+                    onClick={() => updateSpectrum(s.id, { nudgeX: 0, nudgeY: 0, scaleY: 1 })}
+                  >
+                    Reset adjust
+                  </button>
                   <label>Nudge X</label>
                   <div className="nudge-row">
                     <button type="button" onClick={() => updateSpectrum(s.id, { nudgeX: (s.nudgeX ?? 0) - 1 })}>−</button>
@@ -2287,7 +2297,7 @@ export default function StackingView() {
                   <div className="nudge-row">
                     <button type="button" onClick={() => updateSpectrum(s.id, { scaleY: Math.max(0.1, (s.scaleY ?? 1) - 0.1) })}>−</button>
                     <span>{((s.scaleY ?? 1) * 100).toFixed(0)}%</span>
-                    <button type="button" onClick={() => updateSpectrum(s.id, { scaleY: Math.min(3, (s.scaleY ?? 1) + 0.1) })}>+</button>
+                    <button type="button" onClick={() => updateSpectrum(s.id, { scaleY: Math.min(Y_SCALE_MAX, (s.scaleY ?? 1) + 0.1) })}>+</button>
                   </div>
                 </div>
               )}
