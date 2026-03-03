@@ -95,6 +95,23 @@ const SPECTRUM_COLORS = [
   '#006064', '#bf360c', '#311b92', '#33691e', '#4e342e',
 ]
 
+const COS_LABEL = 'College of the Sequoias'
+function isCosSample(sample) {
+  const o = (sample.owner || '').trim().toLowerCase()
+  const r = (sample.origin || '').trim().toLowerCase()
+  return o.includes(COS_LABEL.toLowerCase()) || r.includes(COS_LABEL.toLowerCase())
+}
+function isCosSpectrum(spectrum) {
+  const meta = spectrum.jdxMetadata || []
+  const owner = (meta.find((m) => m.key === 'OWNER')?.value || '').trim().toLowerCase()
+  const origin = (meta.find((m) => m.key === 'ORIGIN')?.value || '').trim().toLowerCase()
+  return owner.includes(COS_LABEL.toLowerCase()) || origin.includes(COS_LABEL.toLowerCase())
+}
+
+const CosBadge = ({ size = 'small', title = COS_LABEL }) => (
+  <span className={`cos-badge cos-badge--${size}`} title={title}>COS</span>
+)
+
 const LEGEND_ROW_HEIGHT = 18
 const LEGEND_SWATCH_SIZE = 12
 const LEGEND_PADDING = 16
@@ -111,6 +128,8 @@ function createExportLegend(visibleDataSpectra, spectra, baseY, svgWidth = 800) 
   const legendTop = baseY + LEGEND_PADDING
   const height = visibleDataSpectra.length * LEGEND_ROW_HEIGHT + LEGEND_PADDING * 2
   visibleDataSpectra.forEach((spec, i) => {
+    const fullSpec = spectra.find((s) => s.id === spec.id)
+    const showCos = fullSpec && isCosSpectrum(fullSpec)
     const color = SPECTRUM_COLORS[spectra.findIndex((s) => s.id === spec.id) % SPECTRUM_COLORS.length]
     const rowY = legendTop + i * LEGEND_ROW_HEIGHT + LEGEND_ROW_HEIGHT / 2
     const rect = document.createElementNS(ns, 'rect')
@@ -127,7 +146,7 @@ function createExportLegend(visibleDataSpectra, spectra, baseY, svgWidth = 800) 
     t.setAttribute('font-size', '12')
     t.setAttribute('font-family', 'system-ui, sans-serif')
     t.setAttribute('fill', '#333')
-    t.textContent = spec.fileName || `Spectrum ${i + 1}`
+    t.textContent = (spec.fileName || `Spectrum ${i + 1}`) + (showCos ? ' COS' : '')
     g.appendChild(rect)
     g.appendChild(t)
   })
@@ -844,6 +863,7 @@ function SampleLibraryModal({ onAddSpectrum, onClose }) {
               <span className="sample-library-col-name">
                 <span className="sample-library-icon" aria-hidden>📄</span>
                 {sample.name}
+                {isCosSample(sample) && <CosBadge />}
               </span>
               <span className="sample-library-col-fg">{(sample.functionalGroups ?? []).join(', ') || '—'}</span>
               <span className="sample-library-col-cas">{sample.casNumber}</span>
@@ -922,6 +942,8 @@ export default function StackingView() {
   const [zoomRange, setZoomRange] = useState(null)
   const [dragSelect, setDragSelect] = useState(null)
   const displayWrapRef = useRef(null)
+  const dragCounterRef = useRef(0)
+  const [isDragActive, setIsDragActive] = useState(false)
   const [jdxError, setJdxError] = useState(null)
   const [calModalZoom, setCalModalZoom] = useState(null)
   const [calModalDrag, setCalModalDrag] = useState(null)
@@ -1511,6 +1533,39 @@ export default function StackingView() {
   const [exportDownloadName, setExportDownloadName] = useState('spectra-stacked')
   const [exportPreviewUrl, setExportPreviewUrl] = useState(null)
 
+  const handleAddJdxFile = useCallback((file) => {
+    if (!file) return
+    setJdxError(null)
+    const reader = new FileReader()
+    reader.onload = () => {
+      try {
+        const text = reader.result
+        const parsed = parseJDX(text)
+        if (!parsed.x?.length || !parsed.y?.length) {
+          setJdxError('No spectral data found in file')
+          return
+        }
+        const { headerEntries } = parseJcampForEditing(text)
+        const jdxMetadata = headerEntries.filter((e) => e.type === 'metadata').map((e) => ({ key: e.key, value: e.value }))
+        const baseName = file.name.replace(/\.(jdx|jcamp|dx)$/i, '')
+        const fileName = parsed.title || baseName || file.name
+        addSpectrum({
+          data: { x: parsed.x, y: parsed.y, yUnits: parsed.yUnits },
+          fileName,
+          metadata: {
+            minWavenumber: parsed.minWavenumber,
+            maxWavenumber: parsed.maxWavenumber,
+            piecewiseAt: 2000,
+          },
+          jdxMetadata,
+        })
+      } catch (err) {
+        setJdxError(err.message || 'Failed to parse JCAMP-DX file')
+      }
+    }
+    reader.readAsText(file)
+  }, [addSpectrum])
+
   useEffect(() => {
     let lastUrl = null
     if (!exportModalOpen || !hasDataOnly) {
@@ -1533,6 +1588,44 @@ export default function StackingView() {
       if (lastUrl) URL.revokeObjectURL(lastUrl)
     }
   }, [exportModalOpen, hasDataOnly, spectra, visibleIds, displayHeight, exportIncludeList])
+
+  const handleDragEnter = useCallback((e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current += 1
+    setIsDragActive(true)
+  }, [])
+
+  const handleDragLeave = useCallback((e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current -= 1
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0
+      setIsDragActive(false)
+    }
+  }, [])
+
+  const handleDragOver = useCallback((e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy'
+  }, [])
+
+  const handleDrop = useCallback((e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    dragCounterRef.current = 0
+    setIsDragActive(false)
+    const files = Array.from(e.dataTransfer?.files || [])
+    if (files.length === 0) return
+    const valid = files.filter((f) => /\.(jdx|dx|jcamp)$/i.test(f.name))
+    if (valid.length === 0) {
+      setJdxError('Please drop a JCAMP-DX file (.jdx, .dx, .jcamp).')
+      return
+    }
+    valid.forEach((file) => handleAddJdxFile(file))
+  }, [handleAddJdxFile])
   const [helpModalOpen, setHelpModalOpen] = useState(false)
   const [settingsModalOpen, setSettingsModalOpen] = useState(false)
   const [yMinOffset, setYMinOffset] = useState(0)
@@ -1704,41 +1797,24 @@ export default function StackingView() {
   const handleJdxFileSelect = useCallback((e) => {
     const file = e.target?.files?.[0]
     if (!file) return
-    setJdxError(null)
-    const reader = new FileReader()
-    reader.onload = () => {
-      try {
-        const text = reader.result
-        const parsed = parseJDX(text)
-        if (!parsed.x?.length || !parsed.y?.length) {
-          setJdxError('No spectral data found in file')
-          return
-        }
-        const { headerEntries } = parseJcampForEditing(text)
-        const jdxMetadata = headerEntries.filter((e) => e.type === 'metadata').map((e) => ({ key: e.key, value: e.value }))
-        const baseName = file.name.replace(/\.(jdx|jcamp|dx)$/i, '')
-        const fileName = parsed.title || baseName || file.name
-        addSpectrum({
-          data: { x: parsed.x, y: parsed.y, yUnits: parsed.yUnits },
-          fileName,
-          metadata: {
-            minWavenumber: parsed.minWavenumber,
-            maxWavenumber: parsed.maxWavenumber,
-            piecewiseAt: 2000,
-          },
-          jdxMetadata,
-        })
-      } catch (err) {
-        setJdxError(err.message || 'Failed to parse JCAMP-DX file')
-      }
-    }
-    reader.readAsText(file)
+    handleAddJdxFile(file)
     e.target.value = ''
-  }, [addSpectrum])
+  }, [handleAddJdxFile])
 
   if (spectra.length === 0 && archivedSpectra.length === 0) {
     return (
-      <div className="app stacking-empty">
+      <div
+        className="app stacking-empty"
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+      >
+        {isDragActive && (
+          <div className="stacking-drop-overlay" aria-hidden="true">
+            <div className="stacking-drop-overlay-content">Drop JCAMP-DX file to add</div>
+          </div>
+        )}
         <header className="header">
           <div className="header-with-help">
             <h1>Stack<span className="header-ir">IR</span></h1>
@@ -1843,7 +1919,18 @@ export default function StackingView() {
   )
 
   return (
-    <div className="app stacking-view">
+    <div
+      className="app stacking-view"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {isDragActive && (
+        <div className="stacking-drop-overlay" aria-hidden="true">
+          <div className="stacking-drop-overlay-content">Drop JCAMP-DX file to add</div>
+        </div>
+      )}
       <header className="header header-desktop">
         <h1>Stack<span className="header-ir">IR</span></h1>
         <p className="subtitle">
@@ -2185,7 +2272,10 @@ export default function StackingView() {
                   </label>
                 )}
                 <span className="spectrum-color" style={{ background: SPECTRUM_COLORS[i % SPECTRUM_COLORS.length] }} />
-                <span className="spectrum-name">{s.fileName || `Spectrum ${i + 1}`}</span>
+                <span className="spectrum-name">
+                  {s.fileName || `Spectrum ${i + 1}`}
+                  {isCosSpectrum(s) && <CosBadge size="small" />}
+                </span>
                 <button
                   type="button"
                   className="spectrum-icon-btn spectrum-remove-btn"

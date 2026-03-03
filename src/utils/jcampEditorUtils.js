@@ -1,6 +1,24 @@
 import { convert } from 'jcampconverter'
 
 /**
+ * Standard metadata key order for consistent JCAMP-DX headers.
+ * Based on sample-spectra/100-41-4-IR.jdx structure.
+ * Missing keys are added with blank values when files are loaded.
+ */
+const STANDARD_METADATA_ORDER = [
+  'TITLE',
+  'JCAMP-DX',
+  'DATA TYPE',
+  'CLASS',
+  'ORIGIN',
+  'OWNER',
+  'DATE',
+  'NAMES',
+  'CAS REGISTRY NO',
+  'FUNCTIONAL GROUPS',
+]
+
+/**
  * Parse JCAMP-DX file into editable metadata + data block.
  * Preserves structure for round-trip editing.
  */
@@ -49,6 +67,43 @@ export function parseJcampForEditing(text) {
   const dataBlock = dataStartIndex >= 0 ? lines.slice(dataStartIndex).join('\n') : ''
 
   return { headerEntries, dataBlock }
+}
+
+/**
+ * Standardize header entries: ensure standard metadata keys exist (with blank
+ * values if missing) and reorder metadata to match STANDARD_METADATA_ORDER.
+ * Raw lines (e.g. copyright) are kept first, then standard keys, then any extras.
+ */
+export function normalizeHeaderEntries(headerEntries) {
+  const rawEntries = headerEntries.filter((e) => e.type === 'raw')
+  const metadataByKey = new Map()
+  const extraKeyOrder = []
+
+  for (const e of headerEntries) {
+    if (e.type === 'metadata') {
+      if (!metadataByKey.has(e.key)) {
+        metadataByKey.set(e.key, e)
+        if (!STANDARD_METADATA_ORDER.includes(e.key)) {
+          extraKeyOrder.push(e.key)
+        }
+      }
+    }
+  }
+
+  const result = [...rawEntries]
+
+  for (const key of STANDARD_METADATA_ORDER) {
+    const existing = metadataByKey.get(key)
+    result.push(
+      existing ?? { type: 'metadata', key, value: '' }
+    )
+  }
+
+  for (const key of extraKeyOrder) {
+    result.push(metadataByKey.get(key))
+  }
+
+  return result
 }
 
 export function serializeJcampForEditing({ headerEntries, dataBlock }) {

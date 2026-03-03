@@ -1,7 +1,7 @@
 import { useState, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import JSZip from 'jszip'
-import { parseJcampForEditing, serializeJcampForEditing, decodeDataBlockToAffn } from '../utils/jcampEditorUtils'
+import { parseJcampForEditing, serializeJcampForEditing, decodeDataBlockToAffn, normalizeHeaderEntries } from '../utils/jcampEditorUtils'
 import './JCAMPDXEditor.css'
 
 const KNOWN_KEYS = [
@@ -125,12 +125,13 @@ function parseFileToEntry(file) {
       try {
         const text = String(reader.result)
         const { headerEntries, dataBlock } = parseJcampForEditing(text)
-        const auditEntry = headerEntries.find((e) => e.type === 'metadata' && e.key === 'AUDIT TRAIL')
+        const normalized = normalizeHeaderEntries(headerEntries)
+        const auditEntry = normalized.find((e) => e.type === 'metadata' && e.key === 'AUDIT TRAIL')
         resolve({
           id: crypto.randomUUID(),
           fileName: file.name,
           originalFileText: text,
-          headerEntries: [...headerEntries],
+          headerEntries: [...normalized],
           dataBlock,
           originalAuditTrail: auditEntry?.value ?? '',
           auditTrailAdditions: [],

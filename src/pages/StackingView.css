@@ -67,6 +67,27 @@
   min-height: 0;
 }
 
+.stacking-drop-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  pointer-events: none;
+}
+
+.stacking-drop-overlay-content {
+  background: rgba(255, 255, 255, 0.95);
+  color: #111;
+  padding: 1rem 1.5rem;
+  border-radius: 10px;
+  border: 2px dashed #4dabf7;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+}
+
 /* Mobile/small screen layout: tools at top, card header above viewbox, no scroll */
 @media (max-width: 900px) {
   .stacking-view {
@@ -657,6 +678,14 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.spectrum-name .cos-badge {
+  background: rgba(0, 102, 204, 0.2);
+  color: var(--subtitle, #666);
 }
 
 .spectrum-toggle {
@@ -1143,6 +1172,24 @@
   flex-shrink: 0;
   font-size: 1rem;
   opacity: 0.8;
+}
+
+.cos-badge {
+  display: inline-block;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 0.1em 0.4em;
+  border-radius: 3px;
+  background: rgba(0, 102, 204, 0.25);
+  color: rgba(255, 255, 255, 0.95);
+  flex-shrink: 0;
+  margin-left: 0.35em;
+}
+
+.cos-badge--small {
+  font-size: 0.55rem;
+  padding: 0.08em 0.3em;
 }
 
 .sample-library-col-fg {
