@@ -3,11 +3,23 @@
  * Scans sample-spectra folder for .jdx, .jcamp, .dx files and generates
  * src/data/sampleSpectra.js. Run before build to include new spectra.
  *
+ * Default (npm run generate:samples): If any spectrum files exist in sample-spectra/
+ * root (not in added/skipped/replaced), imports them first (moves to added/),
+ * then regenerates sampleSpectra.js.
+ *
  * Add mode: node scripts/generateSampleSpectra.js --add <file1> [file2...] [folder/]
- *   Duplicate check order: 1) XYDATA match (perfect), 2) name/cas/names.
+ *   Duplicate check: metadata only — CAS/title/names (legacy), then core ## header values
+ *   (same fields; line order ignored). Does not compare XYDATA or whole-file text.
  *   Only considers replaceable files (blank origin/owner or owner "College of the Sequoias").
  *   Prompts to replace or skip each duplicate.
  *   Accepted → added/, skipped → skipped/, replaced (old file) → replaced/.
+ *   Each file written to added/ gets ##DATE ADDED=YYYY-MM-DD inserted on the line after ##OWNER=.
+ *
+ * Analyze (for GUI): node scripts/generateSampleSpectra.js --analyze <file1> [file2...] [folder/]
+ *   Prints JSON to stdout: kind, paths, matchType, validDecisions, etc. (see README in macOS app).
+ *
+ * Batch (non-interactive): node scripts/generateSampleSpectra.js --batch <plan.json>
+ *   plan.json: { "items": [ { "source": "/abs/path.jdx", "decision": "replace"|"skip"|"add"|"overwrite"|"skip_collision" } ] }
  */
 import fs from 'fs'
 import path from 'path'
@@ -24,6 +36,81 @@ const EXTENSIONS = ['.jdx', '.jcamp', '.dx']
 const REPLACEABLE_OWNER = 'College of the Sequoias'
 
 const DATA_START_PATTERNS = [/^##XYDATA=/i, /^##PEAK TABLE=/i, /^##XYPOINTS=/i, /^##DATA TABLE=/i]
+
+function todayDateStr() {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+/** Remove existing ##DATE ADDED= block (and continuations) */
+function stripDateAddedLines(lines) {
+  const out = []
+  let i = 0
+  while (i < lines.length) {
+    const line = lines[i]
+    if (/^##DATE ADDED=/i.test(line)) {
+      i++
+      while (i < lines.length) {
+        const next = lines[i]
+        if (next.startsWith('##') || DATA_START_PATTERNS.some((p) => p.test(next))) break
+        i++
+      }
+      continue
+    }
+    out.push(line)
+    i++
+  }
+  return out
+}
+
+/** Index of first line after metadata key=value block (handles continuation lines) */
+function endOfMetadataBlock(lines, startIdx) {
+  let i = startIdx + 1
+  while (i < lines.length) {
+    const next = lines[i]
+    if (next.startsWith('##') || DATA_START_PATTERNS.some((p) => p.test(next))) break
+    i++
+  }
+  return i
+}
+
+/**
+ * Insert ##DATE ADDED=<today> on the line immediately after ##OWNER= (after OWNER continuations).
+ * If no OWNER, inserts after ##ORIGIN=. Strips any prior ##DATE ADDED= first.
+ */
+function insertDateAddedAfterOwner(content, dateStr) {
+  const hadTrailingNewline = /\r?\n$/.test(content)
+  let lines = content.split(/\r?\n/)
+  lines = stripDateAddedLines(lines)
+  const dateLine = `##DATE ADDED=${dateStr}`
+
+  const ownerIdx = lines.findIndex((l) => /^##OWNER=/i.test(l))
+  const originIdx = lines.findIndex((l) => /^##ORIGIN=/i.test(l))
+  const anchorIdx = ownerIdx >= 0 ? ownerIdx : originIdx
+  if (anchorIdx < 0) {
+    const classIdx = lines.findIndex((l) => /^##CLASS=/i.test(l))
+    const titleIdx = lines.findIndex((l) => /^##TITLE=/i.test(l))
+    const idx = classIdx >= 0 ? classIdx : titleIdx
+    if (idx >= 0) {
+      const insertAt = endOfMetadataBlock(lines, idx)
+      lines.splice(insertAt, 0, dateLine)
+    } else {
+      lines.unshift(dateLine)
+    }
+  } else {
+    const insertAt = endOfMetadataBlock(lines, anchorIdx)
+    lines.splice(insertAt, 0, dateLine)
+  }
+
+  let out = lines.join('\n')
+  if (hadTrailingNewline && !out.endsWith('\n')) out += '\n'
+  return out
+}
+
+function applyDateAddedToPath(filePath) {
+  const content = fs.readFileSync(filePath, 'utf-8')
+  fs.writeFileSync(filePath, insertDateAddedAfterOwner(content, todayDateStr()), 'utf-8')
+}
 
 /** Extract data block (XYDATA etc.) from content, normalized for comparison */
 function extractDataBlock(content) {
@@ -52,13 +139,73 @@ function isReplaceable(meta) {
   return blank(origin) || blank(owner) || owner.includes(REPLACEABLE_OWNER.toLowerCase())
 }
 
-/** Check if XYDATA blocks match perfectly */
-function xydataMatches(newBlock, existingBlock) {
-  if (!newBlock || !existingBlock) return false
-  return newBlock === existingBlock
+/** Keys compared for duplicate detection; order of ## lines in the file is ignored. */
+const CORE_HEADER_KEYS_FOR_DUP = [
+  'TITLE',
+  'JCAMP-DX',
+  'DATA TYPE',
+  'CLASS',
+  'ORIGIN',
+  'OWNER',
+  'NAMES',
+  'CAS REGISTRY NO',
+  'FUNCTIONAL GROUPS',
+  'MOLFORM',
+  'XUNITS',
+  'YUNITS',
+]
+
+function normalizeHeaderValueForMap(s) {
+  return (s ?? '')
+    .toString()
+    .replace(/\r\n/g, '\n')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
 }
 
-/** Check if metadata matches (on cas, title/name, or names) */
+/**
+ * Parse all ##KEY=value lines before XYDATA into a map (uppercase keys).
+ * Continuation lines (no leading ##) are folded into the value like parseJcampForEditing.
+ */
+function extractHeaderMap(content) {
+  const lines = content.split(/\r?\n/)
+  const map = {}
+  let i = 0
+  while (i < lines.length) {
+    const line = lines[i]
+    if (DATA_START_PATTERNS.some((p) => p.test(line))) break
+    const metaMatch = line.match(/^##([^=]+)=(.*)$/)
+    if (metaMatch) {
+      const key = metaMatch[1].trim().toUpperCase()
+      let value = metaMatch[2]
+      i++
+      while (i < lines.length) {
+        const next = lines[i]
+        if (DATA_START_PATTERNS.some((p) => p.test(next)) || next.startsWith('##')) break
+        const cont = /^\s*\+/.test(next) ? next.replace(/^\s*\+/, '').trimEnd() : next
+        value = value ? `${value}\n${cont}` : cont
+        i++
+      }
+      map[key] = normalizeHeaderValueForMap(value)
+      continue
+    }
+    i++
+  }
+  return map
+}
+
+/** True if core identity fields match when compared as maps (metadata line order irrelevant). */
+function coreHeaderMapsMatch(mapA, mapB) {
+  for (const k of CORE_HEADER_KEYS_FOR_DUP) {
+    const a = mapA[k] ?? ''
+    const b = mapB[k] ?? ''
+    if (a !== b) return false
+  }
+  return true
+}
+
+/** Check if metadata matches (on cas, title/name, or names) — legacy quick checks */
 function metadataMatches(newMeta, existingMeta) {
   const nCas = normalizeCas(newMeta.casNumber)
   const eCas = normalizeCas(existingMeta.casNumber)
@@ -97,6 +244,7 @@ function extractLabelValue(content, label) {
 function extractMetadata(content, filename) {
   const casMatch = content.match(/##CAS REGISTRY NO=[ \t]*([^\r\n]*)/i)
   const casValue = casMatch?.[1]?.trim()
+  const titleFromLabel = extractLabelValue(content, 'TITLE')
   const titleMatch = content.match(/##TITLE=(.+?)(?:\r?\n|$)/i)
   const namesMatch = extractLabelValue(content, 'NAMES')
   const functionalGroupsMatch = extractLabelValue(content, 'FUNCTIONAL GROUPS')
@@ -109,7 +257,7 @@ function extractMetadata(content, filename) {
     : []
   return {
     casNumber: (casValue || (casFromFilename && casFromFilename[1]) || '').trim(),
-    name: (titleMatch?.[1] ?? path.basename(filename, path.extname(filename))).trim(),
+    name: (titleFromLabel ?? titleMatch?.[1] ?? path.basename(filename, path.extname(filename))).trim(),
     names: namesMatch?.trim() || null,
     functionalGroups,
     owner: ownerMatch?.trim() || null,
@@ -136,12 +284,38 @@ function loadExistingMetadata() {
   })
 }
 
-/** Find existing files that match (XYDATA first, then metadata) and are replaceable */
-function findReplaceableDuplicates(newMeta, newDataBlock, existing) {
+/**
+ * Find replaceable duplicates using **metadata values only** (not XYDATA or raw file text).
+ * (1) Legacy CAS / title / names from extractMetadata.
+ * (2) Core ##KEY=value map: same normalized values per field; line order in file ignored.
+ */
+function findReplaceableDuplicates(newMeta, newContent, existing) {
   const replaceable = existing.filter((e) => isReplaceable(e.meta))
-  const xydataMatch = replaceable.filter((e) => xydataMatches(newDataBlock, e.dataBlock))
-  if (xydataMatch.length > 0) return xydataMatch
-  return replaceable.filter((e) => metadataMatches(newMeta, e.meta))
+
+  const legacyMeta = replaceable.filter((e) => metadataMatches(newMeta, e.meta))
+  if (legacyMeta.length > 0) return legacyMeta
+
+  const newMap = extractHeaderMap(newContent)
+  return replaceable.filter((e) => {
+    const exContent = fs.readFileSync(e.filePath, 'utf-8')
+    return coreHeaderMapsMatch(newMap, extractHeaderMap(exContent))
+  })
+}
+
+/** Get spectrum files in sample-spectra root (not in added/skipped/replaced) */
+function getLooseFilesInSampleFolder() {
+  if (!fs.existsSync(SAMPLE_FOLDER)) return []
+  const subdirs = new Set(['added', 'skipped', 'replaced', 'README.md'])
+  const files = fs.readdirSync(SAMPLE_FOLDER)
+    .filter((f) => {
+      if (subdirs.has(f)) return false
+      const full = path.join(SAMPLE_FOLDER, f)
+      if (!fs.statSync(full).isFile()) return false
+      return EXTENSIONS.includes(path.extname(f).toLowerCase())
+    })
+    .sort()
+    .map((f) => path.join(SAMPLE_FOLDER, f))
+  return files
 }
 
 /** Expand folder paths to spectrum files; pass through file paths as-is */
@@ -167,7 +341,233 @@ function expandPaths(paths) {
   return result
 }
 
-async function addMode(filePaths) {
+/** Classify one prospective import (same rules as add mode). */
+function classifyImport(srcPath, existing) {
+  const resolved = path.resolve(srcPath)
+  if (!fs.existsSync(resolved)) {
+    return { error: 'not_found', source: resolved }
+  }
+  const ext = path.extname(resolved).toLowerCase()
+  if (!EXTENSIONS.includes(ext)) {
+    return { error: 'bad_extension', source: resolved, ext }
+  }
+  const content = fs.readFileSync(resolved, 'utf-8')
+  const newMeta = extractMetadata(content, path.basename(resolved))
+  const newDataBlock = extractDataBlock(content)
+  const dupes = findReplaceableDuplicates(newMeta, content, existing)
+  const destBasename = path.basename(resolved)
+  const addedPath = path.join(ADDED_FOLDER, destBasename)
+  const skippedPath = path.join(SKIPPED_FOLDER, destBasename)
+
+  if (dupes.length > 0) {
+    const first = dupes[0]
+    const matchType = metadataMatches(newMeta, first.meta) ? 'metadata' : 'metadata_header'
+    return {
+      kind: 'duplicate',
+      source: resolved,
+      destBasename,
+      addedPath,
+      skippedPath,
+      newMeta,
+      newDataBlock,
+      firstDupe: first,
+      matchType,
+      validDecisions: ['replace', 'skip'],
+    }
+  }
+  if (fs.existsSync(addedPath)) {
+    return {
+      kind: 'filename_collision',
+      source: resolved,
+      destBasename,
+      addedPath,
+      skippedPath,
+      newMeta,
+      newDataBlock,
+      validDecisions: ['overwrite', 'skip_collision'],
+    }
+  }
+  return {
+    kind: 'new',
+    source: resolved,
+    destBasename,
+    addedPath,
+    skippedPath,
+    newMeta,
+    newDataBlock,
+    validDecisions: ['add'],
+  }
+}
+
+/**
+ * Apply one import decision. Mutates `existing` array (loadExistingMetadata snapshot).
+ * decision: replace|skip|add|overwrite|skip_collision
+ */
+function applyImportDecision(classification, existing, decision, autoYes) {
+  if (classification.error) {
+    return { added: 0, replaced: 0, skipped: 1, error: classification.error }
+  }
+
+  const kind = classification.kind
+  const srcPath = classification.source
+  const { destBasename, newMeta, newDataBlock, skippedPath, addedPath } = classification
+
+  if (kind === 'duplicate') {
+    const first = classification.firstDupe
+    if (decision === 'replace') {
+      fs.mkdirSync(ADDED_FOLDER, { recursive: true })
+      fs.mkdirSync(REPLACED_FOLDER, { recursive: true })
+      if (fs.existsSync(first.filePath)) {
+        fs.renameSync(first.filePath, path.join(REPLACED_FOLDER, first.file))
+      }
+      fs.copyFileSync(srcPath, first.filePath)
+      applyDateAddedToPath(first.filePath)
+      const idx = existing.findIndex((e) => e.file === first.file)
+      if (idx >= 0) {
+        existing[idx].meta = newMeta
+        existing[idx].dataBlock = newDataBlock
+      }
+      return { added: 0, replaced: 1, skipped: 0 }
+    }
+    if (decision === 'skip') {
+      if (!autoYes) {
+        fs.mkdirSync(SKIPPED_FOLDER, { recursive: true })
+        fs.copyFileSync(srcPath, skippedPath)
+      }
+      return { added: 0, replaced: 0, skipped: 1 }
+    }
+    throw new Error(`Invalid decision "${decision}" for duplicate`)
+  }
+
+  if (kind === 'filename_collision') {
+    if (decision === 'skip_collision') {
+      if (!autoYes) {
+        fs.mkdirSync(SKIPPED_FOLDER, { recursive: true })
+        fs.copyFileSync(srcPath, skippedPath)
+      }
+      return { added: 0, replaced: 0, skipped: 1 }
+    }
+    if (decision !== 'overwrite') {
+      throw new Error(`Invalid decision "${decision}" for filename_collision`)
+    }
+    fs.mkdirSync(REPLACED_FOLDER, { recursive: true })
+    fs.renameSync(addedPath, path.join(REPLACED_FOLDER, destBasename))
+    const idx = existing.findIndex((e) => e.file === destBasename)
+    if (idx >= 0) existing.splice(idx, 1)
+    // fall through to write new file like "new"
+  } else if (kind === 'new') {
+    if (decision !== 'add') {
+      throw new Error(`Invalid decision "${decision}" for new file`)
+    }
+  }
+
+  fs.mkdirSync(ADDED_FOLDER, { recursive: true })
+  const isLooseInSampleFolder = path.resolve(path.dirname(srcPath)) === path.resolve(SAMPLE_FOLDER)
+  if (isLooseInSampleFolder) {
+    fs.renameSync(srcPath, addedPath)
+  } else {
+    fs.copyFileSync(srcPath, addedPath)
+  }
+  applyDateAddedToPath(addedPath)
+  existing.push({ file: destBasename, filePath: addedPath, meta: newMeta, dataBlock: newDataBlock })
+  return { added: 1, replaced: 0, skipped: 0 }
+}
+
+function analyzeMode(filePaths) {
+  const expanded = expandPaths(filePaths)
+  const existing = loadExistingMetadata()
+  const out = []
+  for (const p of expanded) {
+    const c = classifyImport(p, existing)
+    if (c.error) {
+      out.push({
+        kind: 'error',
+        source: c.source,
+        basename: path.basename(c.source),
+        error: c.error,
+        validDecisions: [],
+      })
+      continue
+    }
+    const row = {
+      kind: c.kind,
+      source: c.source,
+      basename: c.destBasename,
+      matchType: c.matchType || null,
+      casNumber: c.newMeta.casNumber || null,
+      title: c.newMeta.name || null,
+      validDecisions: c.validDecisions,
+      existingInAdded: null,
+    }
+    if (c.kind === 'duplicate') {
+      row.existingInAdded = {
+        file: c.firstDupe.file,
+        path: c.firstDupe.filePath,
+      }
+    } else if (c.kind === 'filename_collision') {
+      row.existingInAdded = {
+        file: c.destBasename,
+        path: c.addedPath,
+      }
+    }
+    out.push(row)
+  }
+  console.log(JSON.stringify({ projectRoot: path.join(__dirname, '..'), sampleFolder: SAMPLE_FOLDER, addedFolder: ADDED_FOLDER, files: out }, null, 2))
+}
+
+function batchMode(planPath) {
+  const abs = path.resolve(planPath)
+  if (!fs.existsSync(abs)) {
+    console.error(`Plan not found: ${abs}`)
+    process.exit(1)
+  }
+  let plan
+  try {
+    plan = JSON.parse(fs.readFileSync(abs, 'utf-8'))
+  } catch (e) {
+    console.error('Invalid JSON plan:', e.message)
+    process.exit(1)
+  }
+  const items = plan.items
+  if (!Array.isArray(items) || items.length === 0) {
+    console.error('Plan must include a non-empty "items" array.')
+    process.exit(1)
+  }
+
+  const existing = loadExistingMetadata()
+  let added = 0
+  let replaced = 0
+  let skipped = 0
+
+  for (const item of items) {
+    const src = item.source
+    const decision = item.decision
+    if (!src || !decision) {
+      console.error('Each item needs "source" and "decision".')
+      process.exit(1)
+    }
+    const c = classifyImport(src, existing)
+    if (c.error) {
+      console.warn(`Skip (${c.error}): ${src}`)
+      skipped++
+      continue
+    }
+    if (!c.validDecisions.includes(decision)) {
+      console.error(`Invalid decision "${decision}" for ${src} (kind=${c.kind}, valid: ${c.validDecisions.join(', ')})`)
+      process.exit(1)
+    }
+    const r = applyImportDecision(c, existing, decision, false)
+    added += r.added
+    replaced += r.replaced
+    skipped += r.skipped
+    console.log(`${c.destBasename}: ${decision} → +${r.added} added, +${r.replaced} replaced, +${r.skipped} skipped`)
+  }
+
+  console.log(`\nBatch done: ${added} added, ${replaced} replaced, ${skipped} skipped`)
+  generateSampleSpectra()
+}
+
+async function addMode(filePaths, autoYes = false) {
   if (!filePaths.length) {
     console.error('Usage: node generateSampleSpectra.js --add <file1.jdx> [file2...] [folder/]')
     process.exit(1)
@@ -181,88 +581,56 @@ async function addMode(filePaths) {
   console.log(`Processing ${expandedPaths.length} file(s)...`)
 
   const existing = loadExistingMetadata()
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
+  const rl = !autoYes ? readline.createInterface({ input: process.stdin, output: process.stdout }) : null
+  const ask = async (prompt, defaultNo = true) => {
+    if (autoYes) return defaultNo ? 'n' : 'y'
+    return (await rl.question(prompt)).trim().toLowerCase()
+  }
 
   let added = 0
   let replaced = 0
   let skipped = 0
 
   for (const rawPath of expandedPaths) {
-    const srcPath = path.resolve(rawPath)
-    if (!fs.existsSync(srcPath)) {
-      console.warn(`Skipping (not found): ${srcPath}`)
-      skipped++
-      continue
-    }
-    const ext = path.extname(srcPath).toLowerCase()
-    if (!EXTENSIONS.includes(ext)) {
-      console.warn(`Skipping (wrong extension): ${srcPath}`)
+    const c = classifyImport(rawPath, existing)
+    if (c.error) {
+      console.warn(`Skipping (${c.error}): ${c.source}`)
       skipped++
       continue
     }
 
-    const content = fs.readFileSync(srcPath, 'utf-8')
-    const newMeta = extractMetadata(content, path.basename(srcPath))
-    const newDataBlock = extractDataBlock(content)
-    const dupes = findReplaceableDuplicates(newMeta, newDataBlock, existing)
+    const destBasename = c.destBasename
+    const newMeta = c.newMeta
 
-    const destBasename = path.basename(srcPath)
-    const addedPath = path.join(ADDED_FOLDER, destBasename)
-    const skippedPath = path.join(SKIPPED_FOLDER, destBasename)
-
-    if (dupes.length > 0) {
-      const first = dupes[0]
-      const matchType = xydataMatches(newDataBlock, first.dataBlock) ? 'XYDATA matches perfectly' : 'matches'
+    let decision
+    if (c.kind === 'duplicate') {
+      const first = c.firstDupe
+      const matchType = c.matchType === 'xydata' ? 'XYDATA matches perfectly' : 'matches'
       const title = (newMeta.name || '-').slice(0, 50)
       const titleStr = (newMeta.name || '').length > 50 ? `${title}...` : title
       const prompt = `\n"${destBasename}" ${matchType} existing "${first.file}" (CAS: ${newMeta.casNumber || '-'}, Title: ${titleStr}). Replace? (y/n): `
-      const answer = (await rl.question(prompt)).trim().toLowerCase()
-      if (answer === 'y' || answer === 'yes') {
-        fs.mkdirSync(ADDED_FOLDER, { recursive: true })
-        fs.mkdirSync(REPLACED_FOLDER, { recursive: true })
-        const replacedPath = path.join(REPLACED_FOLDER, first.file)
-        if (fs.existsSync(first.filePath)) {
-          fs.renameSync(first.filePath, replacedPath)
-        }
-        fs.copyFileSync(srcPath, first.filePath)
-        console.log(`  Replaced ${first.file} → added/ (previous → replaced/)`)
-        replaced++
-        const idx = existing.findIndex((e) => e.file === first.file)
-        if (idx >= 0) {
-          existing[idx].meta = newMeta
-          existing[idx].dataBlock = newDataBlock
-        }
-      } else {
-        fs.mkdirSync(SKIPPED_FOLDER, { recursive: true })
-        fs.copyFileSync(srcPath, skippedPath)
-        console.log(`  Skipped → skipped/`)
-        skipped++
-      }
+      const answer = await ask(prompt, true)
+      decision = answer === 'y' || answer === 'yes' ? 'replace' : 'skip'
+    } else if (c.kind === 'filename_collision') {
+      const prompt = `\n"${destBasename}" already exists in added/. Overwrite? (y/n): `
+      const answer = await ask(prompt, true)
+      decision = answer === 'y' || answer === 'yes' ? 'overwrite' : 'skip_collision'
     } else {
-      if (fs.existsSync(addedPath)) {
-        const prompt = `\n"${destBasename}" already exists in added/. Overwrite? (y/n): `
-        const answer = (await rl.question(prompt)).trim().toLowerCase()
-        if (answer !== 'y' && answer !== 'yes') {
-          fs.mkdirSync(SKIPPED_FOLDER, { recursive: true })
-          fs.copyFileSync(srcPath, skippedPath)
-          console.log(`  Skipped → skipped/`)
-          skipped++
-          continue
-        }
-        fs.mkdirSync(REPLACED_FOLDER, { recursive: true })
-        fs.renameSync(addedPath, path.join(REPLACED_FOLDER, destBasename))
-        const idx = existing.findIndex((e) => e.file === destBasename)
-        if (idx >= 0) existing.splice(idx, 1)
-      }
-      fs.mkdirSync(ADDED_FOLDER, { recursive: true })
-      fs.copyFileSync(srcPath, addedPath)
-      console.log(`  Added → added/`)
-      added++
-      existing.push({ file: destBasename, filePath: addedPath, meta: newMeta, dataBlock: newDataBlock })
+      decision = 'add'
+    }
+
+    const r = applyImportDecision(c, existing, decision, autoYes)
+    added += r.added
+    replaced += r.replaced
+    skipped += r.skipped
+    if (r.added) console.log(`  Added → added/`)
+    if (r.replaced) console.log(`  Replaced → added/ (previous → replaced/)`)
+    if (r.skipped && !autoYes && (decision === 'skip' || decision === 'skip_collision')) {
+      console.log(`  Skipped → skipped/`)
     }
   }
 
-  rl.close()
+  if (rl) rl.close()
   console.log(`\nDone: ${added} added, ${replaced} replaced, ${skipped} skipped`)
   generateSampleSpectra()
 }
@@ -351,6 +719,26 @@ ${arrayEntries}
 
 function main() {
   const args = process.argv.slice(2)
+  const analyzeIdx = args.indexOf('--analyze')
+  if (analyzeIdx >= 0) {
+    const filePaths = args.slice(analyzeIdx + 1)
+    if (!filePaths.length) {
+      console.error('Usage: node scripts/generateSampleSpectra.js --analyze <file1> [file2...] [folder/]')
+      process.exit(1)
+    }
+    analyzeMode(filePaths)
+    return
+  }
+  const batchIdx = args.indexOf('--batch')
+  if (batchIdx >= 0) {
+    const planPath = args[batchIdx + 1]
+    if (!planPath) {
+      console.error('Usage: node scripts/generateSampleSpectra.js --batch <plan.json>')
+      process.exit(1)
+    }
+    batchMode(planPath)
+    return
+  }
   const addIdx = args.indexOf('--add')
   if (addIdx >= 0) {
     const filePaths = args.slice(addIdx + 1)
@@ -359,7 +747,17 @@ function main() {
       process.exit(1)
     })
   } else {
-    generateSampleSpectra()
+    const loose = getLooseFilesInSampleFolder()
+    if (loose.length > 0) {
+      console.log(`Found ${loose.length} spectrum file(s) in sample-spectra/ to import.\n`)
+      const autoYes = !process.stdin.isTTY
+      addMode(loose, autoYes).catch((err) => {
+        console.error(err)
+        process.exit(1)
+      })
+    } else {
+      generateSampleSpectra()
+    }
   }
 }
 

@@ -1,7 +1,13 @@
 import { useState, useCallback, useMemo } from 'react'
 import { Link } from 'react-router-dom'
 import JSZip from 'jszip'
-import { parseJcampForEditing, serializeJcampForEditing, decodeDataBlockToAffn, normalizeHeaderEntries } from '../utils/jcampEditorUtils'
+import {
+  parseJcampForEditing,
+  serializeJcampForEditing,
+  decodeDataBlockToAffn,
+  normalizeHeaderEntries,
+  getDownloadBaseNameFromTitle,
+} from '../utils/jcampEditorUtils'
 import './JCAMPDXEditor.css'
 
 const KNOWN_KEYS = [
@@ -11,6 +17,7 @@ const KNOWN_KEYS = [
   'DATA TYPE',
   'ORIGIN',
   'OWNER',
+  'DATE ADDED',
   'CAS REGISTRY NO',
   'FUNCTIONAL GROUPS',
   'DATE',
@@ -57,6 +64,7 @@ const KEY_FORMAT_GUIDES = {
   'DATA TYPE': 'E.g. INFRARED SPECTRUM, RAMAN SPECTRUM.',
   ORIGIN: 'Organization, address, contributor. Required.',
   OWNER: 'Owner or copyright holder. Use "PUBLIC DOMAIN" if freely copyable. Required.',
+  'DATE ADDED': 'Date the spectrum was added to the sample library (YYYY-MM-DD).',
   'CAS REGISTRY NO': 'CAS number, e.g. 111-36-4.',
   'FUNCTIONAL GROUPS': 'Comma-separated list, e.g. Ester, Carbonyl, Aromatic.',
   DATE: 'YY/MM/DD (year/month/day).',
@@ -310,7 +318,7 @@ export default function JCAMPDXEditor() {
         dataBlock: f.dataBlock,
       })
       const blob = new Blob([content], { type: 'text/plain' })
-      const base = f.fileName.replace(/\.(jdx|jcamp|dx)$/i, '') || 'edited'
+      const base = getDownloadBaseNameFromTitle(f.headerEntries, f.fileName)
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)
       a.download = `${base}_edited.jdx`
@@ -318,13 +326,21 @@ export default function JCAMPDXEditor() {
       URL.revokeObjectURL(a.href)
     } else {
       const zip = new JSZip()
+      const usedNames = new Set()
       files.forEach((f) => {
         const content = serializeJcampForEditing({
           headerEntries: f.headerEntries,
           dataBlock: f.dataBlock,
         })
-        const base = f.fileName.replace(/\.(jdx|jcamp|dx)$/i, '') || 'edited'
-        zip.file(`${base}_edited.jdx`, content)
+        let base = getDownloadBaseNameFromTitle(f.headerEntries, f.fileName)
+        let innerName = `${base}_edited.jdx`
+        if (usedNames.has(innerName)) {
+          let n = 2
+          while (usedNames.has(`${base}_edited_${n}.jdx`)) n += 1
+          innerName = `${base}_edited_${n}.jdx`
+        }
+        usedNames.add(innerName)
+        zip.file(innerName, content)
       })
       zip.generateAsync({ type: 'blob' }).then((blob) => {
         const a = document.createElement('a')
@@ -350,7 +366,7 @@ export default function JCAMPDXEditor() {
       dataBlock: decodedBlock,
     })
     const blob = new Blob([content], { type: 'text/plain' })
-    const base = toDecode.fileName.replace(/\.(jdx|jcamp|dx)$/i, '') || 'decoded'
+    const base = getDownloadBaseNameFromTitle(toDecode.headerEntries, toDecode.fileName)
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
     a.download = `${base}_decoded.jdx`
@@ -439,36 +455,72 @@ export default function JCAMPDXEditor() {
       {error && <div className="error">{error}</div>}
       {applyMessage && <div className="jcamp-apply-message">{applyMessage}</div>}
 
-      {isBatchMode && hasData && (
-        <div className="jcamp-mode-tabs">
-          <button
-            type="button"
-            className={`jcamp-mode-tab ${editMode === 'group' ? 'active' : ''}`}
-            onClick={() => setEditMode('group')}
-          >
-            Group edit
-          </button>
-          <button
-            type="button"
-            className={`jcamp-mode-tab ${editMode === 'individual' ? 'active' : ''}`}
-            onClick={() => setEditMode('individual')}
-          >
-            Individual edit
-          </button>
-          <div className="jcamp-file-selector">
-            {editMode === 'individual' && (
-              <select
-                value={currentFileIndex}
-                onChange={(e) => setCurrentFileIndex(Number(e.target.value))}
-                aria-label="Select file"
+      {hasData && (
+        <div className="jcamp-editor-controls">
+          {isBatchMode && (
+            <div className="jcamp-mode-tabs">
+              <button
+                type="button"
+                className={`jcamp-mode-tab ${editMode === 'group' ? 'active' : ''}`}
+                onClick={() => setEditMode('group')}
               >
-                {files.map((f, i) => (
-                  <option key={f.id} value={i}>
-                    {f.fileName}
-                  </option>
-                ))}
-              </select>
+                Group edit
+              </button>
+              <button
+                type="button"
+                className={`jcamp-mode-tab ${editMode === 'individual' ? 'active' : ''}`}
+                onClick={() => setEditMode('individual')}
+              >
+                Individual edit
+              </button>
+            </div>
+          )}
+          <div className="jcamp-file-toolbar">
+            {isBatchMode && editMode === 'individual' && (
+              <>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setCurrentFileIndex((i) => Math.max(0, i - 1))}
+                  disabled={currentFileIndex <= 0}
+                >
+                  Previous file
+                </button>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() =>
+                    setCurrentFileIndex((i) => Math.min(files.length - 1, i + 1))
+                  }
+                  disabled={currentFileIndex >= files.length - 1}
+                >
+                  Next file
+                </button>
+                <select
+                  value={currentFileIndex}
+                  onChange={(e) => setCurrentFileIndex(Number(e.target.value))}
+                  aria-label="Select file"
+                  className="jcamp-file-select"
+                >
+                  {files.map((f, i) => (
+                    <option key={f.id} value={i}>
+                      {f.fileName}
+                    </option>
+                  ))}
+                </select>
+              </>
             )}
+            <button
+              type="button"
+              className="primary"
+              onClick={
+                isBatchMode && editMode === 'group'
+                  ? handleApplyGroupEdits
+                  : handleApplyIndividual
+              }
+            >
+              {isBatchMode && editMode === 'group' ? 'Apply to all files' : 'Apply'}
+            </button>
           </div>
         </div>
       )}

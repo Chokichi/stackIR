@@ -4,20 +4,27 @@
  * Auto-generated - do not edit manually.
  */
 import spectrum_0 from '../../sample-spectra/added/1- Octanol.jdx?raw'
-import spectrum_1 from '../../sample-spectra/added/100-41-4-IR.jdx?raw'
-import spectrum_2 from '../../sample-spectra/added/109-94-4-IR.jdx?raw'
-import spectrum_3 from '../../sample-spectra/added/111-36-4-IR.jdx?raw'
-import spectrum_4 from '../../sample-spectra/added/119-36-8-IR.jdx?raw'
-import spectrum_5 from '../../sample-spectra/added/134-62-3-IR.jdx?raw'
-import spectrum_6 from '../../sample-spectra/added/141-78-6-IR.jdx?raw'
-import spectrum_7 from '../../sample-spectra/added/592-42-7-IR.jdx?raw'
-import spectrum_8 from '../../sample-spectra/added/6630-86-0-IR.jdx?raw'
-import spectrum_9 from '../../sample-spectra/added/94-09-7-IR.jdx?raw'
-import spectrum_10 from '../../sample-spectra/added/Acetone 67-64-1.jdx?raw'
-import spectrum_11 from '../../sample-spectra/added/Benzaldehyde 100-52-7.jdx?raw'
-import spectrum_12 from '../../sample-spectra/added/Benzil 134-81-6 run1_edited.jdx?raw'
-import spectrum_13 from '../../sample-spectra/added/Ethyl Acetate 141-78-6.jdx?raw'
-import spectrum_14 from '../../sample-spectra/added/n-Pentane 109-66-0.jdx?raw'
+import spectrum_1 from '../../sample-spectra/added/1- Propanol 71-23-8 run4_edited.jdx?raw'
+import spectrum_2 from '../../sample-spectra/added/100-41-4-IR.jdx?raw'
+import spectrum_3 from '../../sample-spectra/added/109-94-4-IR.jdx?raw'
+import spectrum_4 from '../../sample-spectra/added/111-36-4-IR.jdx?raw'
+import spectrum_5 from '../../sample-spectra/added/119-36-8-IR.jdx?raw'
+import spectrum_6 from '../../sample-spectra/added/134-62-3-IR.jdx?raw'
+import spectrum_7 from '../../sample-spectra/added/141-78-6-IR.jdx?raw'
+import spectrum_8 from '../../sample-spectra/added/2-Pentanone 107-87-0 Run1_edited.jdx?raw'
+import spectrum_9 from '../../sample-spectra/added/592-42-7-IR.jdx?raw'
+import spectrum_10 from '../../sample-spectra/added/6630-86-0-IR.jdx?raw'
+import spectrum_11 from '../../sample-spectra/added/94-09-7-IR.jdx?raw'
+import spectrum_12 from '../../sample-spectra/added/Acetamide 60-35-5 run2_edited.jdx?raw'
+import spectrum_13 from '../../sample-spectra/added/Acetone 67-64-1.jdx?raw'
+import spectrum_14 from '../../sample-spectra/added/Benzaldehyde 100-52-7.jdx?raw'
+import spectrum_15 from '../../sample-spectra/added/Benzamide 55-21-0 run1_edited (1).jdx?raw'
+import spectrum_16 from '../../sample-spectra/added/Benzil 134-81-6 run1_edited.jdx?raw'
+import spectrum_17 from '../../sample-spectra/added/Dextrose 492-62-6 run1_edited.jdx?raw'
+import spectrum_18 from '../../sample-spectra/added/Ethyl Acetate 141-78-6.jdx?raw'
+import spectrum_19 from '../../sample-spectra/added/Lactose 63-42-3 run1_edited.jdx?raw'
+import spectrum_20 from '../../sample-spectra/added/diethyl ether 60-29-7 run2_edited.jdx?raw'
+import spectrum_21 from '../../sample-spectra/added/n-Pentane 109-66-0.jdx?raw'
 
 export const SAMPLE_SPECTRA = [
   {
@@ -32,6 +39,17 @@ export const SAMPLE_SPECTRA = [
     jdxContent: spectrum_0,
   },
   {
+    id: '71-23-8',
+    name: '1- Propanol 71-23-8 run2',
+    casNumber: '71-23-8',
+    names: null,
+    functionalGroups: ['Alcohol'],
+    owner: 'COS',
+    origin: 'COS',
+    citation: null,
+    jdxContent: spectrum_1,
+  },
+  {
     id: '100-41-4',
     name: 'ETHYL BENZENE',
     casNumber: '100-41-4',
@@ -40,7 +58,7 @@ export const SAMPLE_SPECTRA = [
     owner: 'COBLENTZ SOCIETY\nCollection (C) 2018 copyright by the U.S. Secretary of Commerce\non behalf of the United States of America. All rights reserved.',
     origin: 'STANDARD OIL OF OHIO',
     citation: null,
-    jdxContent: spectrum_1,
+    jdxContent: spectrum_2,
   },
   {
     id: '109-94-4',
@@ -51,7 +69,7 @@ export const SAMPLE_SPECTRA = [
     owner: 'COBLENTZ SOCIETY\nCollection (C) 2018 copyright by the U.S. Secretary of Commerce\non behalf of the United States of America. All rights reserved.',
     origin: 'DOW CHEMICAL COMPANY',
     citation: null,
-    jdxContent: spectrum_2,
+    jdxContent: spectrum_3,
   },
   {
     id: '111-36-4',
@@ -62,7 +80,7 @@ export const SAMPLE_SPECTRA = [
     owner: 'NIST Standard Reference Data Program\nCollection (C) 2018 copyright by the U.S. Secretary of Commerce\non behalf of the United States of America. All rights reserved.',
     origin: 'Sadtler Research Labs Under US-EPA Contract',
     citation: null,
-    jdxContent: spectrum_3,
+    jdxContent: spectrum_4,
   },
   {
     id: '119-36-8',
@@ -73,7 +91,7 @@ export const SAMPLE_SPECTRA = [
     owner: 'COBLENTZ SOCIETY\nCollection (C) 2018 copyright by the U.S. Secretary of Commerce\non behalf of the United States of America. All rights reserved.',
     origin: 'DOW CORNING CORP.',
     citation: null,
-    jdxContent: spectrum_4,
+    jdxContent: spectrum_5,
   },
   {
     id: '134-62-3',
@@ -84,7 +102,7 @@ export const SAMPLE_SPECTRA = [
     owner: 'NIST Standard Reference Data Program\nCollection (C) 2018 copyright by the U.S. Secretary of Commerce\non behalf of the United States of America. All rights reserved.',
     origin: 'NIST Mass Spectrometry Data Center',
     citation: null,
-    jdxContent: spectrum_5,
+    jdxContent: spectrum_6,
   },
   {
     id: '141-78-6',
@@ -95,7 +113,18 @@ export const SAMPLE_SPECTRA = [
     owner: 'COBLENTZ SOCIETY\nCollection (C) 2018 copyright by the U.S. Secretary of Commerce\non behalf of the United States of America. All rights reserved.',
     origin: 'DOW CORNING CORP.',
     citation: 'COBLENTZ NO. 4802; DOW CORNING CORP.',
-    jdxContent: spectrum_6,
+    jdxContent: spectrum_7,
+  },
+  {
+    id: '107-87-0',
+    name: '2-Pentanone 107-87-0 Run1',
+    casNumber: '107-87-0',
+    names: null,
+    functionalGroups: ['Ketone'],
+    owner: 'COS',
+    origin: 'COS',
+    citation: null,
+    jdxContent: spectrum_8,
   },
   {
     id: '592-42-7',
@@ -106,7 +135,7 @@ export const SAMPLE_SPECTRA = [
     owner: 'COBLENTZ SOC.\nCollection (C) 2018 copyright by the U.S. Secretary of Commerce\non behalf of the United States of America. All rights reserved.',
     origin: 'DOW CHEMICAL COMPANY',
     citation: null,
-    jdxContent: spectrum_7,
+    jdxContent: spectrum_9,
   },
   {
     id: '6630-86-0',
@@ -117,7 +146,7 @@ export const SAMPLE_SPECTRA = [
     owner: 'COBLENTZ SOCIETY\nCollection (C) 2018 copyright by the U.S. Secretary of Commerce\non behalf of the United States of America. All rights reserved.',
     origin: 'ANDERSON PHYSICAL LABORATORY',
     citation: null,
-    jdxContent: spectrum_8,
+    jdxContent: spectrum_10,
   },
   {
     id: '94-09-7',
@@ -128,7 +157,18 @@ export const SAMPLE_SPECTRA = [
     owner: 'NIST Standard Reference Data Program\nCollection (C) 2018 copyright by the U.S. Secretary of Commerce\non behalf of the United States of America. All rights reserved.',
     origin: 'NIST Mass Spectrometry Data Center',
     citation: null,
-    jdxContent: spectrum_9,
+    jdxContent: spectrum_11,
+  },
+  {
+    id: '60-35-5',
+    name: 'Acetamide 60-35-5 run2',
+    casNumber: '60-35-5',
+    names: null,
+    functionalGroups: ['Amide'],
+    owner: 'COS',
+    origin: 'COS',
+    citation: null,
+    jdxContent: spectrum_12,
   },
   {
     id: '67-64-1',
@@ -139,7 +179,7 @@ export const SAMPLE_SPECTRA = [
     owner: 'College of the Sequoias',
     origin: 'College of the Sequoias',
     citation: null,
-    jdxContent: spectrum_10,
+    jdxContent: spectrum_13,
   },
   {
     id: '100-52-7',
@@ -150,7 +190,18 @@ export const SAMPLE_SPECTRA = [
     owner: 'College of the Sequoias',
     origin: 'College of the Sequoias',
     citation: null,
-    jdxContent: spectrum_11,
+    jdxContent: spectrum_14,
+  },
+  {
+    id: '55-21-0',
+    name: 'Benzamide 55-21-0 run1',
+    casNumber: '55-21-0',
+    names: null,
+    functionalGroups: ['Aromatic', 'Amide'],
+    owner: 'COS',
+    origin: 'COS',
+    citation: null,
+    jdxContent: spectrum_15,
   },
   {
     id: '134-81-6',
@@ -161,7 +212,18 @@ export const SAMPLE_SPECTRA = [
     owner: 'College of the Sequoias',
     origin: 'College of the Sequoias',
     citation: null,
-    jdxContent: spectrum_12,
+    jdxContent: spectrum_16,
+  },
+  {
+    id: '492-62-6',
+    name: 'Dextrose 492-62-6 run1',
+    casNumber: '492-62-6',
+    names: null,
+    functionalGroups: ['Aldehyde', 'Hydroxyl'],
+    owner: 'COS',
+    origin: 'COS',
+    citation: null,
+    jdxContent: spectrum_17,
   },
   {
     id: '141-78-6-Ethyl-Acetate-141-78-6-jdx',
@@ -172,7 +234,29 @@ export const SAMPLE_SPECTRA = [
     owner: 'College of the Sequoias',
     origin: 'College of the Sequoias',
     citation: null,
-    jdxContent: spectrum_13,
+    jdxContent: spectrum_18,
+  },
+  {
+    id: '63-42-3',
+    name: 'Lactose 63-42-3 run1',
+    casNumber: '63-42-3',
+    names: null,
+    functionalGroups: ['Alcohol'],
+    owner: 'COS',
+    origin: 'COS',
+    citation: null,
+    jdxContent: spectrum_19,
+  },
+  {
+    id: '60-29-7',
+    name: 'diethyl ether 60-29-7 run2',
+    casNumber: '60-29-7',
+    names: null,
+    functionalGroups: ['Ether'],
+    owner: 'COS',
+    origin: 'COS',
+    citation: null,
+    jdxContent: spectrum_20,
   },
   {
     id: '109-66-0',
@@ -183,6 +267,6 @@ export const SAMPLE_SPECTRA = [
     owner: 'College of the Sequoias',
     origin: 'College of the Sequoias',
     citation: null,
-    jdxContent: spectrum_14,
+    jdxContent: spectrum_21,
   }
 ]

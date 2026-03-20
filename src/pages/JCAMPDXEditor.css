@@ -28,12 +28,33 @@
   color: var(--accent);
 }
 
+.jcamp-editor-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.jcamp-file-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.jcamp-file-toolbar .primary {
+  margin-left: auto;
+}
+
 .jcamp-mode-tabs {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 0.75rem;
-  margin-bottom: 1rem;
+  margin-bottom: 0;
 }
 
 .jcamp-mode-tab {
@@ -56,13 +77,15 @@
   border-color: var(--accent);
 }
 
-.jcamp-file-selector select {
+.jcamp-file-selector select,
+.jcamp-file-select {
   padding: 0.4rem 0.75rem;
   font-size: 0.875rem;
   border: 1px solid var(--border);
   border-radius: 6px;
   background: var(--panel);
   color: inherit;
+  max-width: min(100%, 22rem);
 }
 
 .jcamp-apply-message {

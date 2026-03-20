@@ -12,6 +12,7 @@ const STANDARD_METADATA_ORDER = [
   'CLASS',
   'ORIGIN',
   'OWNER',
+  'DATE ADDED',
   'DATE',
   'NAMES',
   'CAS REGISTRY NO',
@@ -125,6 +126,34 @@ export function serializeJcampForEditing({ headerEntries, dataBlock }) {
     }
   }
   return [...headerLines, dataBlock].filter(Boolean).join('\n')
+}
+
+/**
+ * Safe download basename from ##TITLE= metadata, else stem of original filename.
+ * Strips characters invalid in file names (cross-platform).
+ */
+export function getDownloadBaseNameFromTitle(headerEntries, fallbackFileName = 'edited') {
+  const titleEntry = headerEntries.find(
+    (e) => e.type === 'metadata' && String(e.key).toUpperCase() === 'TITLE'
+  )
+  const raw = String(titleEntry?.value ?? '').trim()
+  const sanitized = raw
+    .replace(/[/\\:*?"<>|]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+  if (sanitized) {
+    const clipped = sanitized.length > 180 ? `${sanitized.slice(0, 177)}…` : sanitized
+    return clipped || fallbackStem(fallbackFileName)
+  }
+  return fallbackStem(fallbackFileName)
+}
+
+function fallbackStem(fallbackFileName) {
+  const base = String(fallbackFileName ?? '')
+    .replace(/\.(jdx|jcamp|dx)$/i, '')
+    .trim()
+  const stem = base || 'edited'
+  return stem.replace(/[/\\:*?"<>|]/g, '-').trim() || 'edited'
 }
 
 /**

@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Swift PM
+**/.build
+macos/SampleImportAssistant/build/

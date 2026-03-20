@@ -8,6 +8,8 @@
     "build": "node scripts/generateSampleSpectra.js && vite build",
     "generate:samples": "node scripts/generateSampleSpectra.js",
     "add:samples": "node scripts/generateSampleSpectra.js --add",
+    "analyze:samples": "node scripts/generateSampleSpectra.js --analyze",
+    "import:batch": "node scripts/generateSampleSpectra.js --batch",
     "lint": "eslint .",
     "preview": "vite preview"
   },
