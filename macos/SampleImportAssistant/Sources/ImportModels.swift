@@ -9,15 +9,30 @@ struct AnalyzeEnvelope: Codable {
     let files: [AnalyzeFileRow]
 }
 
+/// Library file that matches the incoming spectrum by CAS (for replace target selection).
+struct CasCandidate: Codable, Identifiable, Hashable {
+    var id: String { file }
+    let file: String
+    let path: String
+    let title: String?
+    let casNumber: String?
+}
+
 struct AnalyzeFileRow: Codable, Identifiable {
     var id: String { source }
     let kind: String
     let source: String
     let basename: String
     let matchType: String?
+    /// `cas` | `legacy` | `header` when kind is duplicate; otherwise null.
+    let duplicateKind: String?
     let casNumber: String?
     let title: String?
     let validDecisions: [String]
+    /// When duplicate by CAS, all replaceable library files with the same ##CAS REGISTRY NO=.
+    let casCandidates: [CasCandidate]?
+    /// All duplicate candidates (CAS, XYDATA, etc.) — use for replace-target picker.
+    let duplicateCandidates: [CasCandidate]?
     let existingInAdded: ExistingInAdded?
     let error: String?
     struct ExistingInAdded: Codable {
@@ -35,6 +50,8 @@ struct BatchPlan: Codable {
 struct BatchItem: Codable {
     let source: String
     let decision: String
+    /// Basename in `sample-spectra/added/` to replace when decision is `replace` and multiple CAS matches exist.
+    var replaceTargetFile: String?
 }
 
 // MARK: - UI state
@@ -63,4 +80,6 @@ struct QueuedDecision: Identifiable {
     var sourceURL: URL
     var analyze: AnalyzeFileRow
     var decision: ImportDecision
+    /// Library file basename for duplicate → replace (CAS picker).
+    var replaceTargetFile: String?
 }

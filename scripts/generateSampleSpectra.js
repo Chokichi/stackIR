@@ -16,10 +16,11 @@
  *   Each file written to added/ gets ##DATE ADDED=YYYY-MM-DD inserted on the line after ##OWNER=.
  *
  * Analyze (for GUI): node scripts/generateSampleSpectra.js --analyze <file1> [file2...] [folder/]
- *   Prints JSON to stdout: kind, paths, matchType, validDecisions, etc. (see README in macOS app).
+ *   Prints JSON: kind, matchType, casCandidates (when duplicate by CAS), validDecisions, etc.
  *
  * Batch (non-interactive): node scripts/generateSampleSpectra.js --batch <plan.json>
- *   plan.json: { "items": [ { "source": "/abs/path.jdx", "decision": "replace"|"skip"|"add"|"overwrite"|"skip_collision" } ] }
+ *   plan.json: { "items": [ { "source": "...", "decision": "...", "replaceTargetFile": "basename-in-added.jdx" } ] }
+ *   For duplicate + replace with multiple CAS matches, set replaceTargetFile to the library file to replace.
  */
 import fs from 'fs'
 import path from 'path'
@@ -123,20 +124,57 @@ function extractDataBlock(content) {
   return ''
 }
 
+/** Normalize data block for comparison: collapse whitespace so line breaks don't affect match. */
+function normalizeDataBlockForCompare(dataBlock) {
+  return (dataBlock ?? '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function normalizeCas(s) {
   return (s ?? '').toString().replace(/\s+/g, '').toLowerCase()
+}
+
+/** CAS from ##CAS REGISTRY NO= only (not filename). Used for duplicate detection. */
+function getCasFromLabel(content) {
+  const match = content.match(/##CAS\s+REGISTRY\s+NO=[ \t]*([^\r\n]*)/i)
+  const raw = (match?.[1] ?? '').trim()
+  return raw && !/^-+$/.test(raw) ? raw : ''
 }
 
 function normalizeStr(s) {
   return (s ?? '').toString().trim().toLowerCase()
 }
 
-/** Existing file is replaceable if blank origin/owner or owner is College of the Sequoias */
+/** Normalize ORIGIN/OWNER for comparison — "COS" ≈ "College of the Sequoias". */
+function normalizeOriginOrOwner(v) {
+  const s = normalizeStr(v)
+  if (s === 'cos' || s === 'college of the sequoias' || s === 'college of the sequoia') {
+    return 'college of the sequoias'
+  }
+  return s
+}
+
+/** True if two titles are compatible (equal or one contains the other, min 4 chars). */
+function titlesCompatible(a, b) {
+  const na = (a ?? '').trim().toLowerCase()
+  const nb = (b ?? '').trim().toLowerCase()
+  if (na === nb) return true
+  if (na.length >= 4 && nb.length >= 4 && (na.includes(nb) || nb.includes(na))) return true
+  return false
+}
+
+/** Existing file is replaceable if blank origin/owner or owner is College of the Sequoias (or "COS") */
 function isReplaceable(meta) {
   const owner = normalizeStr(meta.owner)
   const origin = normalizeStr(meta.origin)
   const blank = (v) => !v || v === '-' || v === ''
-  return blank(origin) || blank(owner) || owner.includes(REPLACEABLE_OWNER.toLowerCase())
+  if (blank(origin) || blank(owner)) return true
+  if (owner.includes(REPLACEABLE_OWNER.toLowerCase())) return true
+  if (normalizeOriginOrOwner(owner) === 'college of the sequoias') return true
+  return false
 }
 
 /** Keys compared for duplicate detection; order of ## lines in the file is ignored. */
@@ -200,6 +238,18 @@ function coreHeaderMapsMatch(mapA, mapB) {
   for (const k of CORE_HEADER_KEYS_FOR_DUP) {
     const a = mapA[k] ?? ''
     const b = mapB[k] ?? ''
+    if (k === 'CAS REGISTRY NO' && (a === '' || b === '')) {
+      continue
+    }
+    if (k === 'TITLE' && (a === '' || b === '')) {
+      continue
+    }
+    if (k === 'TITLE' && titlesCompatible(a, b)) {
+      continue
+    }
+    if ((k === 'ORIGIN' || k === 'OWNER') && normalizeOriginOrOwner(a) === normalizeOriginOrOwner(b)) {
+      continue
+    }
     if (a !== b) return false
   }
   return true
@@ -285,21 +335,52 @@ function loadExistingMetadata() {
 }
 
 /**
- * Find replaceable duplicates using **metadata values only** (not XYDATA or raw file text).
- * (1) Legacy CAS / title / names from extractMetadata.
- * (2) Core ##KEY=value map: same normalized values per field; line order in file ignored.
+ * Find replaceable duplicates. Order of checks:
+ * (1) **CAS REGISTRY NO** — normalized match on non-empty CAS (all replaceable library entries with same CAS).
+ * (2) Legacy CAS / title / names from extractMetadata (when CAS branch did not apply).
+ * (3) Core ##KEY=value map: same normalized values per field; line order ignored.
+ * (4) **XYDATA** — same spectral data (normalized; used when no CAS match).
  */
-function findReplaceableDuplicates(newMeta, newContent, existing) {
+function findReplaceableDuplicates(newMeta, newContent, newDataBlock, existing) {
   const replaceable = existing.filter((e) => isReplaceable(e.meta))
+  const newDataNorm = normalizeDataBlockForCompare(newDataBlock)
+
+  const newCasFromLabel = normalizeCas(getCasFromLabel(newContent))
+  if (newCasFromLabel) {
+    const casMatches = replaceable.filter((e) => {
+      const exContent = fs.readFileSync(e.filePath, 'utf-8')
+      return normalizeCas(getCasFromLabel(exContent)) === newCasFromLabel
+    })
+    if (casMatches.length > 0) {
+      return { kind: 'cas', matches: casMatches }
+    }
+  }
 
   const legacyMeta = replaceable.filter((e) => metadataMatches(newMeta, e.meta))
-  if (legacyMeta.length > 0) return legacyMeta
+  if (legacyMeta.length > 0) {
+    return { kind: 'legacy', matches: legacyMeta }
+  }
 
   const newMap = extractHeaderMap(newContent)
-  return replaceable.filter((e) => {
+  const headerMatches = replaceable.filter((e) => {
     const exContent = fs.readFileSync(e.filePath, 'utf-8')
     return coreHeaderMapsMatch(newMap, extractHeaderMap(exContent))
   })
+  if (headerMatches.length > 0) {
+    return { kind: 'header', matches: headerMatches }
+  }
+
+  if (newDataNorm) {
+    const xydataMatches = replaceable.filter((e) => {
+      const exNorm = normalizeDataBlockForCompare(e.dataBlock)
+      return exNorm && newDataNorm === exNorm
+    })
+    if (xydataMatches.length > 0) {
+      return { kind: 'xydata', matches: xydataMatches }
+    }
+  }
+
+  return { kind: 'none', matches: [] }
 }
 
 /** Get spectrum files in sample-spectra root (not in added/skipped/replaced) */
@@ -354,14 +435,22 @@ function classifyImport(srcPath, existing) {
   const content = fs.readFileSync(resolved, 'utf-8')
   const newMeta = extractMetadata(content, path.basename(resolved))
   const newDataBlock = extractDataBlock(content)
-  const dupes = findReplaceableDuplicates(newMeta, content, existing)
+  const dupResult = findReplaceableDuplicates(newMeta, content, newDataBlock, existing)
+  const dupes = dupResult.matches
   const destBasename = path.basename(resolved)
   const addedPath = path.join(ADDED_FOLDER, destBasename)
   const skippedPath = path.join(SKIPPED_FOLDER, destBasename)
 
   if (dupes.length > 0) {
     const first = dupes[0]
-    const matchType = metadataMatches(newMeta, first.meta) ? 'metadata' : 'metadata_header'
+    let matchType = 'metadata_header'
+    if (dupResult.kind === 'cas') {
+      matchType = 'cas'
+    } else if (dupResult.kind === 'legacy' && metadataMatches(newMeta, first.meta)) {
+      matchType = 'metadata'
+    } else if (dupResult.kind === 'xydata') {
+      matchType = 'xydata'
+    }
     return {
       kind: 'duplicate',
       source: resolved,
@@ -370,6 +459,8 @@ function classifyImport(srcPath, existing) {
       skippedPath,
       newMeta,
       newDataBlock,
+      dupes,
+      duplicateKind: dupResult.kind,
       firstDupe: first,
       matchType,
       validDecisions: ['replace', 'skip'],
@@ -403,7 +494,7 @@ function classifyImport(srcPath, existing) {
  * Apply one import decision. Mutates `existing` array (loadExistingMetadata snapshot).
  * decision: replace|skip|add|overwrite|skip_collision
  */
-function applyImportDecision(classification, existing, decision, autoYes) {
+function applyImportDecision(classification, existing, decision, autoYes, replaceTargetBasename) {
   if (classification.error) {
     return { added: 0, replaced: 0, skipped: 1, error: classification.error }
   }
@@ -413,7 +504,13 @@ function applyImportDecision(classification, existing, decision, autoYes) {
   const { destBasename, newMeta, newDataBlock, skippedPath, addedPath } = classification
 
   if (kind === 'duplicate') {
-    const first = classification.firstDupe
+    const dupes = classification.dupes ?? []
+    let target = classification.firstDupe
+    if (decision === 'replace' && replaceTargetBasename) {
+      const found = dupes.find((d) => d.file === replaceTargetBasename)
+      if (found) target = found
+    }
+    const first = target
     if (decision === 'replace') {
       fs.mkdirSync(ADDED_FOLDER, { recursive: true })
       fs.mkdirSync(REPLACED_FOLDER, { recursive: true })
@@ -494,15 +591,28 @@ function analyzeMode(filePaths) {
       source: c.source,
       basename: c.destBasename,
       matchType: c.matchType || null,
+      duplicateKind: c.kind === 'duplicate' ? c.duplicateKind : null,
       casNumber: c.newMeta.casNumber || null,
       title: c.newMeta.name || null,
       validDecisions: c.validDecisions,
       existingInAdded: null,
+      casCandidates: null,
+      duplicateCandidates: null,
     }
     if (c.kind === 'duplicate') {
       row.existingInAdded = {
         file: c.firstDupe.file,
         path: c.firstDupe.filePath,
+      }
+      if (c.dupes?.length) {
+        const candidates = c.dupes.map((d) => ({
+          file: d.file,
+          path: d.filePath,
+          title: d.meta.name || null,
+          casNumber: d.meta.casNumber || null,
+        }))
+        row.duplicateCandidates = candidates
+        if (c.duplicateKind === 'cas') row.casCandidates = candidates
       }
     } else if (c.kind === 'filename_collision') {
       row.existingInAdded = {
@@ -556,7 +666,7 @@ function batchMode(planPath) {
       console.error(`Invalid decision "${decision}" for ${src} (kind=${c.kind}, valid: ${c.validDecisions.join(', ')})`)
       process.exit(1)
     }
-    const r = applyImportDecision(c, existing, decision, false)
+    const r = applyImportDecision(c, existing, decision, false, item.replaceTargetFile)
     added += r.added
     replaced += r.replaced
     skipped += r.skipped
@@ -619,7 +729,7 @@ async function addMode(filePaths, autoYes = false) {
       decision = 'add'
     }
 
-    const r = applyImportDecision(c, existing, decision, autoYes)
+    const r = applyImportDecision(c, existing, decision, autoYes, undefined)
     added += r.added
     replaced += r.replaced
     skipped += r.skipped

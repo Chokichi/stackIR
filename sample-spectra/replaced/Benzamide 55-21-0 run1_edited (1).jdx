@@ -1,18 +1,19 @@
-##AUDIT TRAIL=<03/06/26 19:05:25>, <SHIMADZU>, <>, <Scan on IRAffinity-, SNO: A21374801693>
-<03/06/26 19:05:25>, <SHIMADZU>, <>, <Measured in GLP mode>
-<03/06/26 19:05:25>, <SHIMADZU>, <>, <Measured with accessory: 2098 (A2098PK50430)>
-<03/06/26 19:05:25>, <SHIMADZU>, <>, <Auto: Gain=8>
-<03/06/26 19:05:25>, <SHIMADZU>, <>, <Auto: Aperture=3.0>
-##TITLE=Benzamide 55-21-0 run1
+##TITLE=Benzamide
 ##JCAMP-DX=4.24
 ##DATA TYPE=
 ##CLASS=
-##ORIGIN=COS
-##OWNER=COS
+##ORIGIN=College of the Sequoias
+##OWNER=College of the Sequoias
+##DATE ADDED=2026-03-19
 ##DATE=
 ##NAMES=
-##CAS REGISTRY NO=
+##CAS REGISTRY NO=55-21-0
 ##FUNCTIONAL GROUPS=Aromatic, Amide
+##AUDIT TRAIL=<03/06/26 19:05:25>, <SHIMADZU>, <>, <Scan on IRAffinity-, SNO: A21374801693>
++<03/06/26 19:05:25>, <SHIMADZU>, <>, <Measured in GLP mode>
++<03/06/26 19:05:25>, <SHIMADZU>, <>, <Measured with accessory: 2098 (A2098PK50430)>
++<03/06/26 19:05:25>, <SHIMADZU>, <>, <Auto: Gain=8>
++<03/06/26 19:05:25>, <SHIMADZU>, <>, <Auto: Aperture=3.0>
 ##BLOCK_ID=1
 ##DATATYPE=INFRARED SPECTRUM
 ##SOURCEREFERENCE=FTIR Measurement

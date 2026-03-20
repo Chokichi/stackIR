@@ -1,19 +1,19 @@
-##AUDIT TRAIL=<02/27/26 21:16:27>, <SHIMADZU>, <>, <Scan on IRAffinity-, SNO: A21374801693>
-<02/27/26 21:16:27>, <SHIMADZU>, <>, <Measured in GLP mode>
-<02/27/26 21:16:27>, <SHIMADZU>, <>, <Measured with accessory: 2098 (A2098PK5����)>
-<02/27/26 21:16:27>, <SHIMADZU>, <>, <Auto: Gain=4>
-<02/27/26 21:16:27>, <SHIMADZU>, <>, <Auto: Aperture=open>
-##TITLE=Dextrose 492-62-6 run1
+##TITLE=Dextrose
 ##JCAMP-DX=4.24
 ##DATA TYPE=
 ##CLASS=
-##ORIGIN=COS
-##OWNER=COS
+##ORIGIN=College of the Sequoias
+##OWNER=College of the Sequoias
 ##DATE ADDED=2026-03-19
 ##DATE=
 ##NAMES=
-##CAS REGISTRY NO=
+##CAS REGISTRY NO=492-62-6
 ##FUNCTIONAL GROUPS=Aldehyde, Hydroxyl
+##AUDIT TRAIL=<02/27/26 21:16:27>, <SHIMADZU>, <>, <Scan on IRAffinity-, SNO: A21374801693>
++<02/27/26 21:16:27>, <SHIMADZU>, <>, <Measured in GLP mode>
++<02/27/26 21:16:27>, <SHIMADZU>, <>, <Measured with accessory: 2098 (A2098PK5����)>
++<02/27/26 21:16:27>, <SHIMADZU>, <>, <Auto: Gain=4>
++<02/27/26 21:16:27>, <SHIMADZU>, <>, <Auto: Aperture=open>
 ##BLOCK_ID=1
 ##DATATYPE=INFRARED SPECTRUM
 ##SOURCEREFERENCE=FTIR Measurement

@@ -32,6 +32,8 @@ struct ContentView: View {
     @State private var diffCompareMode: DiffCompareMode = .metadataSorted
     /// Bumped after each `loadDiff` so the scroll view can jump to the first mismatch.
     @State private var diffScrollEpoch: Int = 0
+    /// Canonical incoming path → which `added/` basename to replace when multiple CAS matches exist.
+    @State private var replaceTargetBySource: [String: String] = [:]
     @State private var statusMessage: String = "Set project root, add files, then Analyze."
     @State private var isRunningNode = false
     @State private var lastNodeLog: String = ""
@@ -93,16 +95,19 @@ struct ContentView: View {
             }
             .navigationSplitViewColumnWidth(min: 220, ideal: 280)
         } detail: {
-            VStack(alignment: .leading, spacing: 12) {
-                settingsBar
-                HStack(alignment: .top, spacing: 16) {
-                    decisionPanel
-                    diffPanel
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    settingsBar
+                    HStack(alignment: .top, spacing: 16) {
+                        decisionPanel
+                        diffPanel
+                    }
+                    logArea
                 }
-                .frame(maxHeight: .infinity)
-                logArea
+                .padding()
+                .frame(minWidth: 520)
             }
-            .padding()
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .onChange(of: selectedFile) { newVal in
             loadDiff(for: newVal)
@@ -188,7 +193,18 @@ struct ContentView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
-                    if let ex = row.existingInAdded {
+                    if let candidates = row.duplicateCandidates ?? row.casCandidates, !candidates.isEmpty, row.kind == "duplicate" {
+                        Text(duplicateCandidatesLabel(row.matchType))
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Picker("Replace which file", selection: replaceTargetBinding(sourceURL: sel.url, row: row, candidates: candidates)) {
+                            ForEach(candidates) { c in
+                                Text(c.file).tag(c.file)
+                            }
+                        }
+                        .labelsHidden()
+                    } else if let ex = row.existingInAdded {
                         Text("Existing in library: \(ex.file)")
                             .font(.caption)
                     }
@@ -239,7 +255,7 @@ struct ContentView: View {
                         fullFilePairedDiffView
                     }
                 }
-                .frame(minHeight: 360)
+                .frame(minHeight: 240, maxHeight: 420)
             }
         } label: {
             Text("Side-by-side (yellow = different line)")
@@ -385,11 +401,43 @@ struct ContentView: View {
 
     private func matchTypeLabel(_ raw: String) -> String {
         switch raw {
+        case "cas": return "##CAS REGISTRY NO= (library match)"
         case "metadata": return "metadata (CAS / title / names)"
         case "metadata_header": return "metadata (core ## fields)"
-        case "xydata": return "XYDATA (legacy)"
+        case "xydata": return "##XYDATA= (spectral data)"
         default: return raw
         }
+    }
+
+    private func duplicateCandidatesLabel(_ matchType: String?) -> String {
+        switch matchType {
+        case "cas": return "Same ##CAS REGISTRY NO= as these library file(s). Choose which to replace:"
+        case "xydata": return "Same ##XYDATA= (spectral data) as these library file(s). Choose which to replace:"
+        default: return "Matching library file(s). Choose which to replace:"
+        }
+    }
+
+    private func replaceTargetBinding(sourceURL: URL, row: AnalyzeFileRow, candidates: [CasCandidate]) -> Binding<String> {
+        let key = canonicalPathKey(for: sourceURL)
+        let fallback = candidates.first?.file ?? ""
+        return Binding(
+            get: { replaceTargetBySource[key] ?? fallback },
+            set: { newVal in
+                replaceTargetBySource[key] = newVal
+                loadDiff(for: selectedFile)
+            }
+        )
+    }
+
+    /// Path to the library file shown in the diff (respects replace-target picker).
+    private func existingLibraryPathForDiff(row: AnalyzeFileRow, sourceURL: URL) -> String? {
+        let key = canonicalPathKey(for: sourceURL)
+        let candidates = row.duplicateCandidates ?? row.casCandidates
+        if let list = candidates, !list.isEmpty {
+            let basename = replaceTargetBySource[key] ?? list[0].file
+            return list.first(where: { $0.file == basename })?.path
+        }
+        return row.existingInAdded?.path
     }
 
     private func decisions(for row: AnalyzeFileRow) -> [ImportDecision] {
@@ -402,7 +450,23 @@ struct ContentView: View {
 
     private func enqueueDecision(url: URL, row: AnalyzeFileRow, decision: ImportDecision) {
         decisionQueue.removeAll { $0.sourceURL == url }
-        decisionQueue.append(QueuedDecision(sourceURL: url, analyze: row, decision: decision))
+        let replaceTarget: String? = {
+            guard decision == .replace, row.kind == "duplicate" else { return nil }
+            let key = canonicalPathKey(for: url)
+            let candidates = row.duplicateCandidates ?? row.casCandidates
+            if let list = candidates, !list.isEmpty {
+                return replaceTargetBySource[key] ?? list[0].file
+            }
+            return row.existingInAdded?.file
+        }()
+        decisionQueue.append(
+            QueuedDecision(
+                sourceURL: url,
+                analyze: row,
+                decision: decision,
+                replaceTargetFile: replaceTarget
+            )
+        )
         statusMessage = "Queued \(url.lastPathComponent) → \(decision.label)"
         advanceSelection(afterDeciding: url)
     }
@@ -435,7 +499,7 @@ struct ContentView: View {
               row.kind != "error" else { return }
         let incoming = (try? String(contentsOf: file.url, encoding: .utf8)) ?? ""
         var existingText = ""
-        if let exPath = row.existingInAdded?.path {
+        if let exPath = existingLibraryPathForDiff(row: row, sourceURL: file.url) {
             existingText = (try? String(contentsOf: URL(fileURLWithPath: exPath), encoding: .utf8)) ?? ""
         }
         let isPlaceholder = row.kind == "new" && existingText.isEmpty
@@ -541,6 +605,11 @@ struct ContentView: View {
                 nodeExecutable: nodeExecutablePath.isEmpty ? nil : nodeExecutablePath
             )
             analyzeBySource = Dictionary(uniqueKeysWithValues: env.files.map { (canonicalPathKey(for: $0.source), $0) })
+            replaceTargetBySource = Dictionary(uniqueKeysWithValues: env.files.compactMap { row -> (String, String)? in
+                let candidates = row.duplicateCandidates ?? row.casCandidates
+                guard let first = candidates?.first else { return nil }
+                return (canonicalPathKey(for: row.source), first.file)
+            })
             statusMessage = "Analyzed \(env.files.count) file(s)."
             let previousSelection = selectedFile
             selectedFile = prospectiveFiles.first
@@ -556,7 +625,11 @@ struct ContentView: View {
     private func runBatchImport() async {
         guard let root = projectRoot else { return }
         let plan = BatchPlan(items: decisionQueue.map {
-            BatchItem(source: $0.sourceURL.path, decision: $0.decision.rawValue)
+            BatchItem(
+                source: $0.sourceURL.path,
+                decision: $0.decision.rawValue,
+                replaceTargetFile: $0.replaceTargetFile
+            )
         })
         let temp = FileManager.default.temporaryDirectory
             .appendingPathComponent("bkg-import-\(UUID().uuidString).json")
@@ -570,10 +643,36 @@ struct ContentView: View {
             )
             statusMessage = "Import finished. Run `npm run build` in the project if needed."
             try? FileManager.default.removeItem(at: temp)
+            removeQueuedFilesFromWatchFolder()
+            refreshProspectiveImportsAfterImport()
         } catch {
             lastNodeLog = error.localizedDescription
             statusMessage = "Batch failed."
         }
+    }
+
+    /// Delete queued source files that live in the watch folder (Node has already copied them to added/).
+    private func removeQueuedFilesFromWatchFolder() {
+        guard !watchFolderPath.isEmpty else { return }
+        let watchURL = URL(fileURLWithPath: watchFolderPath, isDirectory: true).resolvingSymlinksInPath()
+        let fm = FileManager.default
+        for q in decisionQueue {
+            let fileURL = q.sourceURL.resolvingSymlinksInPath()
+            let fileDir = fileURL.deletingLastPathComponent().resolvingSymlinksInPath()
+            guard fileDir == watchURL else { continue }
+            try? fm.removeItem(at: fileURL)
+        }
+    }
+
+    /// Remove processed items from queue, drop non-existent files from prospective list, clear queue.
+    private func refreshProspectiveImportsAfterImport() {
+        let fm = FileManager.default
+        prospectiveFiles.removeAll { !fm.fileExists(atPath: $0.url.path) }
+        decisionQueue.removeAll()
+        let keysToDrop = Set(prospectiveFiles.map { canonicalPathKey(for: $0.url) })
+        analyzeBySource = analyzeBySource.filter { keysToDrop.contains($0.key) }
+        replaceTargetBySource = replaceTargetBySource.filter { keysToDrop.contains($0.key) }
+        syncSelection()
     }
 }
 
