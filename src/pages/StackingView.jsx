@@ -31,6 +31,9 @@ const TARGET_WIDTH = 800
 const BASE_DISPLAY_HEIGHT = 475
 /** Max Y scale for spectrum (1 = 100%). */
 const Y_SCALE_MAX = 10
+/** Range inputs for distributed vertical gap (px); keep desktop + settings in sync. */
+const DISTRIBUTED_GAP_MIN = -420
+const DISTRIBUTED_GAP_MAX = 120
 
 const EyeIcon = ({ visible = true, size = 14 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -95,6 +98,19 @@ const SPECTRUM_COLORS = [
   '#006064', '#bf360c', '#311b92', '#33691e', '#4e342e',
 ]
 
+/** Plot / legend color: optional per-spectrum `lineColor` (#rrggbb) or palette by list index. */
+function spectrumLineColor(spectrum, indexForPalette) {
+  const c = spectrum.lineColor
+  if (typeof c === 'string' && /^#[0-9A-Fa-f]{6}$/.test(c)) return c
+  const i = Math.max(0, indexForPalette ?? 0)
+  return SPECTRUM_COLORS[i % SPECTRUM_COLORS.length]
+}
+
+function spectrumLineColorFromList(spectrum, spectra) {
+  const idx = spectra.findIndex((s) => s.id === spectrum.id)
+  return spectrumLineColor(spectrum, idx >= 0 ? idx : 0)
+}
+
 const COS_LABEL = 'College of the Sequoias'
 function isCosSample(sample) {
   const o = (sample.owner || '').trim().toLowerCase()
@@ -130,7 +146,8 @@ function createExportLegend(visibleDataSpectra, spectra, baseY, svgWidth = 800) 
   visibleDataSpectra.forEach((spec, i) => {
     const fullSpec = spectra.find((s) => s.id === spec.id)
     const showCos = fullSpec && isCosSpectrum(fullSpec)
-    const color = SPECTRUM_COLORS[spectra.findIndex((s) => s.id === spec.id) % SPECTRUM_COLORS.length]
+    const idx = spectra.findIndex((s) => s.id === spec.id)
+    const color = spectrumLineColor(fullSpec ?? spec, idx >= 0 ? idx : i)
     const rowY = legendTop + i * LEGEND_ROW_HEIGHT + LEGEND_ROW_HEIGHT / 2
     const rect = document.createElementNS(ns, 'rect')
     rect.setAttribute('x', legendX)
@@ -411,14 +428,66 @@ function CalibrationModal({
   )
 }
 
+/** Match SpectrumDataDisplay: inner plot width for wavenumber ↔ pixel mapping. */
+const SPECTRUM_DISPLAY_PAD_LEFT = 52
+const SPECTRUM_DISPLAY_PAD_RIGHT = 16
+
+function spectrumPlotInnerWidthPx(chartWidth) {
+  return Math.max(1, chartWidth - SPECTRUM_DISPLAY_PAD_LEFT - SPECTRUM_DISPLAY_PAD_RIGHT)
+}
+
+/**
+ * Approximate Δwavenumber (cm⁻¹) for horizontal SVG nudge (px), using the same normX scale as the chart.
+ */
+function nudgeXPxToDeltaWavenumberCm1(nudgeXPx, wMin, wMax, plotWPx, piecewise) {
+  if (!nudgeXPx || !plotWPx) return 0
+  const dNorm = nudgeXPx / plotWPx
+  const norm0 = 0.5
+  const norm1 = Math.max(0, Math.min(1, norm0 + dNorm))
+  const w0 = normXToWavenumber(norm0, wMin, wMax, piecewise)
+  const w1 = normXToWavenumber(norm1, wMin, wMax, piecewise)
+  return w1 - w0
+}
+
+function buildExportAdjustmentNoteLines(spectra, visibleIds, zoomRange, chartWidth = 800) {
+  const plotW = spectrumPlotInnerWidthPx(chartWidth)
+  const wMin = zoomRange?.xMin ?? TARGET_WAVENUMBER_MIN
+  const wMax = zoomRange?.xMax ?? TARGET_WAVENUMBER_MAX
+  const lines = []
+  for (const s of spectra) {
+    if (!visibleIds.has(s.id) || !s.data) continue
+    const nx = s.nudgeX ?? 0
+    const ny = s.nudgeY ?? 0
+    const sy = s.scaleY ?? 1
+    if (nx === 0 && ny === 0 && Math.abs(sy - 1) < 0.001) continue
+    const name = s.fileName || s.id.slice(0, 8)
+    const parts = []
+    if (nx !== 0) {
+      const piecewise = s.metadata?.piecewiseAt != null
+      const dw = nudgeXPxToDeltaWavenumberCm1(nx, wMin, wMax, plotW, piecewise)
+      const sign = dw >= 0 ? '+' : ''
+      parts.push(`Δx ≈ ${sign}${dw.toFixed(1)} cm⁻¹`)
+    }
+    if (ny !== 0) {
+      parts.push(`Y nudge ${ny > 0 ? '+' : ''}${ny} px`)
+    }
+    if (Math.abs(sy - 1) >= 0.001) {
+      parts.push(`Y scale ${(sy * 100).toFixed(0)}%`)
+    }
+    lines.push(`  ${name}: ${parts.join('; ')}`)
+  }
+  if (lines.length === 0) return []
+  return ['Adjustments (non-default):', ...lines, '']
+}
+
 /** Build export SVG (chart + legend + optional list), return blob URL for preview. Returns null if not data-only or SVG not found. */
-function buildExportSvgBlobUrl(displayWrapRef, spectra, visibleIds, displayHeight, includeList) {
+function buildExportSvgBlobUrl(displayWrapRef, spectra, visibleIds, displayHeight, includeList, zoomRange) {
   const wrap = displayWrapRef?.current
   const svg = wrap?.querySelector('.spectrum-data-display')
   if (!svg) return null
   const visibleDataSpectra = spectra.filter((s) => visibleIds.has(s.id) && s.data)
   if (visibleDataSpectra.length === 0) return null
-  const listText = buildPeakRegionList(spectra, visibleIds)
+  const listText = buildPeakRegionList(spectra, visibleIds, zoomRange)
   const origHeight = parseInt(svg.getAttribute('height') || displayHeight, 10)
   const { g: legendG, height: legendHeight } = createExportLegend(visibleDataSpectra, spectra, origHeight, 800)
   const listHeight = includeList && listText.trim() ? Math.min(listText.split('\n').length * 18 + 60, 400) : 0
@@ -452,8 +521,9 @@ function buildExportSvgBlobUrl(displayWrapRef, spectra, visibleIds, displayHeigh
   return URL.createObjectURL(blob)
 }
 
-function buildPeakRegionList(spectra, visibleIds) {
+function buildPeakRegionList(spectra, visibleIds, zoomRange = null, chartWidth = 800) {
   const lines = []
+  lines.push(...buildExportAdjustmentNoteLines(spectra, visibleIds, zoomRange, chartWidth))
   for (const s of spectra) {
     if (!visibleIds.has(s.id) || !s.data) continue
     const name = s.fileName || s.id.slice(0, 8)
@@ -577,6 +647,10 @@ function SettingsModal({
   open,
   onClose,
   hasDataOnly,
+  overlayMode,
+  setOverlayMode,
+  distributedGap,
+  setDistributedGap,
   normalizeY,
   setNormalizeY,
   showWavenumberBox,
@@ -595,6 +669,33 @@ function SettingsModal({
           <button type="button" onClick={onClose} className="ghost small settings-modal-close" aria-label="Close">×</button>
         </div>
         <div className="settings-modal-body">
+          <div className="settings-modal-option">
+            <label htmlFor="settings-overlay-mode">Overlay layout</label>
+            <select
+              id="settings-overlay-mode"
+              value={overlayMode}
+              onChange={(e) => setOverlayMode(e.target.value)}
+              style={{ padding: '0.5rem 0.75rem', borderRadius: 6, width: '100%' }}
+            >
+              <option value="stacked">Stacked (overlaid)</option>
+              <option value="distributed">Distributed vertically</option>
+            </select>
+          </div>
+          <span className="settings-modal-hint">Stacked draws spectra on one plot; distributed separates them with a vertical gap.</span>
+          {overlayMode === 'distributed' && (
+            <div className="settings-modal-option settings-modal-gap">
+              <label htmlFor="settings-distributed-gap">Gap: {distributedGap}px</label>
+              <input
+                id="settings-distributed-gap"
+                type="range"
+                min={DISTRIBUTED_GAP_MIN}
+                max={DISTRIBUTED_GAP_MAX}
+                value={distributedGap}
+                onChange={(e) => setDistributedGap(Number(e.target.value))}
+                style={{ width: '100%' }}
+              />
+            </div>
+          )}
           {hasDataOnly && (
             <>
               <div className="settings-modal-option">
@@ -928,6 +1029,7 @@ export default function StackingView() {
     clearSpectra,
     archiveSpectrum,
     restoreSpectrum,
+    updateArchivedSpectrum,
     overlayMode,
     setOverlayMode,
     distributedGap,
@@ -1136,8 +1238,7 @@ export default function StackingView() {
     if (visible.length === 0) return
 
     const loadAndDraw = async () => {
-      const colorForSpec = (spec) =>
-        SPECTRUM_COLORS[spectra.findIndex((s) => s.id === spec.id) % SPECTRUM_COLORS.length]
+      const colorForSpec = (spec) => spectrumLineColorFromList(spec, spectra)
 
       const processed = await Promise.all(
         visible.map((s) => {
@@ -1580,14 +1681,15 @@ export default function StackingView() {
       spectra,
       visibleIds,
       displayHeight,
-      exportIncludeList
+      exportIncludeList,
+      zoomRange
     )
     lastUrl = url
     if (url) setExportPreviewUrl(url)
     return () => {
       if (lastUrl) URL.revokeObjectURL(lastUrl)
     }
-  }, [exportModalOpen, hasDataOnly, spectra, visibleIds, displayHeight, exportIncludeList])
+  }, [exportModalOpen, hasDataOnly, spectra, visibleIds, displayHeight, exportIncludeList, zoomRange])
 
   const handleDragEnter = useCallback((e) => {
     e.preventDefault()
@@ -1636,7 +1738,7 @@ export default function StackingView() {
   const downloadStacked = useCallback((format = downloadFormat, includeList = false, downloadName = exportDownloadName) => {
     const effectiveFormat = !hasDataOnly && format === 'svg' ? 'png' : format
     const baseName = (downloadName || 'spectra-stacked').trim().replace(/[/\\:*?"<>|]/g, '-') || 'spectra-stacked'
-    const listText = hasDataOnly && includeList ? buildPeakRegionList(spectra, visibleIds) : ''
+    const listText = hasDataOnly && includeList ? buildPeakRegionList(spectra, visibleIds, zoomRange) : ''
     const addImageToPdf = (pdf, imgData) => {
       pdf.addImage(imgData, 'PNG', 0, 0, EXPORT_WIDTH_IN, EXPORT_HEIGHT_IN)
     }
@@ -1787,7 +1889,7 @@ export default function StackingView() {
         pdf.save(`${baseName}.pdf`)
       }
     }
-  }, [hasDataOnly, downloadFormat, spectra, visibleIds, displayHeight, exportDownloadName])
+  }, [hasDataOnly, downloadFormat, spectra, visibleIds, displayHeight, exportDownloadName, zoomRange])
 
   const handleAddFromSampleLibrary = useCallback((spectrumData) => {
     setJdxError(null)
@@ -1960,8 +2062,8 @@ export default function StackingView() {
                   <label>Gap: {distributedGap}px</label>
                   <input
                     type="range"
-                    min="0"
-                    max="120"
+                    min={DISTRIBUTED_GAP_MIN}
+                    max={DISTRIBUTED_GAP_MAX}
                     value={distributedGap}
                     onChange={(e) => setDistributedGap(Number(e.target.value))}
                   />
@@ -2031,7 +2133,7 @@ export default function StackingView() {
               <SpectrumDataDisplay
                 spectra={visibleDataSpectra.map((s) => ({
                   ...s,
-                  color: SPECTRUM_COLORS[spectra.findIndex((sp) => sp.id === s.id) % SPECTRUM_COLORS.length],
+                  color: spectrumLineColorFromList(s, spectra),
                 }))}
                 width={800}
                 height={displayHeight}
@@ -2271,7 +2373,16 @@ export default function StackingView() {
                     <span className="spectrum-active-dot" title="Active for region selection" />
                   </label>
                 )}
-                <span className="spectrum-color" style={{ background: SPECTRUM_COLORS[i % SPECTRUM_COLORS.length] }} />
+                <label className="spectrum-color-picker" title="Change line color">
+                  <input
+                    type="color"
+                    className="spectrum-color-input-hidden"
+                    value={spectrumLineColor(s, i)}
+                    onChange={(e) => updateSpectrum(s.id, { lineColor: e.target.value })}
+                    aria-label={`Line color for ${s.fileName || `spectrum ${i + 1}`}`}
+                  />
+                  <span className="spectrum-color" style={{ background: spectrumLineColor(s, i) }} />
+                </label>
                 <span className="spectrum-name">
                   {s.fileName || `Spectrum ${i + 1}`}
                   {isCosSpectrum(s) && <CosBadge size="small" />}
@@ -2631,7 +2742,16 @@ export default function StackingView() {
                 archivedSpectra.map((s, i) => (
                   <div key={s.id} className="spectrum-item archive-item">
                     <div className="spectrum-toggle">
-                      <span className="spectrum-color" style={{ background: SPECTRUM_COLORS[i % SPECTRUM_COLORS.length] }} />
+                      <label className="spectrum-color-picker" title="Change line color (kept when you restore)">
+                        <input
+                          type="color"
+                          className="spectrum-color-input-hidden"
+                          value={spectrumLineColor(s, i)}
+                          onChange={(e) => updateArchivedSpectrum(s.id, { lineColor: e.target.value })}
+                          aria-label={`Line color for ${s.fileName || `spectrum ${i + 1}`}`}
+                        />
+                        <span className="spectrum-color" style={{ background: spectrumLineColor(s, i) }} />
+                      </label>
                       <span className="spectrum-name">{s.fileName || `Spectrum ${i + 1}`}</span>
                     </div>
                     <button
@@ -2680,6 +2800,10 @@ export default function StackingView() {
         open={settingsModalOpen}
         onClose={() => setSettingsModalOpen(false)}
         hasDataOnly={hasDataOnly}
+        overlayMode={overlayMode}
+        setOverlayMode={setOverlayMode}
+        distributedGap={distributedGap}
+        setDistributedGap={setDistributedGap}
         normalizeY={normalizeY}
         setNormalizeY={setNormalizeY}
         showWavenumberBox={showWavenumberBox}

@@ -15,8 +15,19 @@ const HELP_CONTENT = {
       {
         title: 'Getting started',
         items: [
-          { term: 'Sample library', desc: 'Load pre-loaded IR spectra. Search by name, CAS No, or functional group; sort by Name, CAS, or Functional groups. Click Add or double-click a row.' },
+          { term: 'Sample library', desc: 'Load pre-loaded IR spectra. Search by name, CAS No., or functional group; sort by Name, CAS, or Functional groups. Click Add or double-click a row. Entries from College of the Sequoias show a COS label in the list.' },
           { term: 'Add JCAMP-DX file', desc: 'Load your own spectra. Supports .jdx, .jcamp, and .dx files.' },
+          { term: 'Drag and drop', desc: 'Drop JCAMP-DX files onto the page to add them to the list.' },
+        ],
+      },
+      {
+        title: 'Spectra list (sidebar)',
+        items: [
+          { term: 'Show on plot', desc: 'The eye icon toggles whether that spectrum is drawn. Hidden spectra stay in the list.' },
+          { term: 'Line color', desc: 'Click or tap the color swatch beside a spectrum to open the color picker. Custom colors apply to the plot, stacked image exports, and SVG legend; they are saved with the spectrum in this browser.' },
+          { term: 'Active spectrum', desc: 'The round control marks the spectrum used for the Region tool and related edits. Only appears when you have JCAMP-DX data loaded.' },
+          { term: 'Archive', desc: 'The × control moves a spectrum to the Archive tab. Use Restore to bring it back. The archive is cleared if you reload the page.' },
+          { term: 'Metadata & Adjust', desc: 'Open JCAMP header details, fine-tune X/Y nudge and scale, and expand Peaks & Regions from the row controls.' },
         ],
       },
       {
@@ -47,14 +58,14 @@ const HELP_CONTENT = {
           { term: 'Normalize Y per spectrum', desc: 'Scale each spectrum to 0–1 for overlay comparison.' },
           { term: 'Show wavenumber at cursor', desc: 'Display wavenumber while hovering over the spectrum.' },
           { term: 'Show wavenumbers in labels', desc: 'Append wavenumber range to peak/region labels.' },
-        { term: 'Y-axis display', desc: 'Switch between Transmittance (default) and Absorbance. Absorbance files are converted to transmittance by default.' },
+          { term: 'Y-axis display', desc: 'Switch between Transmittance (default) and Absorbance. Absorbance files are converted to transmittance by default.' },
         ],
       },
       {
         title: 'Export',
         items: [
-          { term: 'PNG / PDF', desc: 'Export the stacked spectra as an image.' },
-          { term: 'SVG', desc: 'Vector format (JCAMP-DX only). Optionally include peak/region list.' },
+          { term: 'PNG / PDF', desc: 'Export the stacked spectra as an image. Colors match each spectrum\'s line color (default palette or your custom swatch).' },
+          { term: 'SVG', desc: 'Vector format (JCAMP-DX only). Optionally include peak/region list. Legend swatches use the same colors as the sidebar.' },
         ],
       },
       {
@@ -63,6 +74,7 @@ const HELP_CONTENT = {
           { term: 'X nudge ±', desc: 'Shift spectrum horizontally (for alignment).' },
           { term: 'Y nudge ±', desc: 'Shift spectrum vertically.' },
           { term: 'Y scale ±', desc: 'Scale the spectrum vertically.' },
+          { term: 'Y min (JCAMP-DX)', desc: 'Next to the scale hint, use Y min +/− to raise or lower the plot baseline (flatten or sharpen peaks). Resets with Reset zoom.' },
           { term: 'Peak grouping', desc: 'Select peaks and use Group selected to combine labels.' },
         ],
       },

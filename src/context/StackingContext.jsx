@@ -98,6 +98,12 @@ export function StackingProvider({ children }) {
     setVisibleIds((prev) => new Set([...prev, spec.id]))
   }, [])
 
+  const updateArchivedSpectrum = useCallback((id, updates) => {
+    setArchivedSpectra((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, ...updates } : s))
+    )
+  }, [])
+
   const toggleVisible = useCallback((id) => {
     setVisibleIds((prev) => {
       const next = new Set(prev)
@@ -138,6 +144,7 @@ export function StackingProvider({ children }) {
     removeSpectrum,
     archiveSpectrum,
     restoreSpectrum,
+    updateArchivedSpectrum,
     toggleVisible,
     updateSpectrum,
     clearSpectra,
