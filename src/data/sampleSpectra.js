@@ -19,23 +19,24 @@ import spectrum_12 from '../../sample-spectra/added/2-methyl-2-propanol 75-65-0 
 import spectrum_13 from '../../sample-spectra/added/592-42-7-IR.jdx?raw'
 import spectrum_14 from '../../sample-spectra/added/6630-86-0-IR.jdx?raw'
 import spectrum_15 from '../../sample-spectra/added/9-Fluorenone 486-25-91.dx?raw'
-import spectrum_16 from '../../sample-spectra/added/94-09-7-IR.jdx?raw'
-import spectrum_17 from '../../sample-spectra/added/Acetamide 60-35-5 run2_edited.jdx?raw'
-import spectrum_18 from '../../sample-spectra/added/Acetone 67-64-1.jdx?raw'
-import spectrum_19 from '../../sample-spectra/added/Aspartame_edited.jdx?raw'
-import spectrum_20 from '../../sample-spectra/added/Benzaldehyde 100-52-7.jdx?raw'
-import spectrum_21 from '../../sample-spectra/added/Benzamide 55-21-0 run1_edited (1).jdx?raw'
-import spectrum_22 from '../../sample-spectra/added/Benzil 134-81-6 run1_edited.jdx?raw'
-import spectrum_23 from '../../sample-spectra/added/Caffeine_edited.jdx?raw'
-import spectrum_24 from '../../sample-spectra/added/Dextrose 492-62-6 run1_edited.jdx?raw'
-import spectrum_25 from '../../sample-spectra/added/Ethyl Acetate 141-78-6.jdx?raw'
-import spectrum_26 from '../../sample-spectra/added/Hydroquinone 99 percent 123-31-9 Run 11.dx?raw'
-import spectrum_27 from '../../sample-spectra/added/Lactose 63-42-3 run1_edited.jdx?raw'
-import spectrum_28 from '../../sample-spectra/added/R-Carvone-6485-40-11.dx?raw'
-import spectrum_29 from '../../sample-spectra/added/Resorcinol_edited.jdx?raw'
-import spectrum_30 from '../../sample-spectra/added/Water 7732-18-5 Run.dx?raw'
-import spectrum_31 from '../../sample-spectra/added/diethyl ether 60-29-7 run2_edited.jdx?raw'
-import spectrum_32 from '../../sample-spectra/added/n-Pentane 109-66-0.jdx?raw'
+import spectrum_16 from '../../sample-spectra/added/9-Fluorenone 486-25-92.dx?raw'
+import spectrum_17 from '../../sample-spectra/added/94-09-7-IR.jdx?raw'
+import spectrum_18 from '../../sample-spectra/added/Acetamide 60-35-5 run2_edited.jdx?raw'
+import spectrum_19 from '../../sample-spectra/added/Acetone 67-64-1.jdx?raw'
+import spectrum_20 from '../../sample-spectra/added/Aspartame_edited.jdx?raw'
+import spectrum_21 from '../../sample-spectra/added/Benzaldehyde 100-52-7.jdx?raw'
+import spectrum_22 from '../../sample-spectra/added/Benzamide 55-21-0 run1_edited (1).jdx?raw'
+import spectrum_23 from '../../sample-spectra/added/Benzil 134-81-6 run1_edited.jdx?raw'
+import spectrum_24 from '../../sample-spectra/added/Caffeine_edited.jdx?raw'
+import spectrum_25 from '../../sample-spectra/added/Dextrose 492-62-6 run1_edited.jdx?raw'
+import spectrum_26 from '../../sample-spectra/added/Ethyl Acetate 141-78-6.jdx?raw'
+import spectrum_27 from '../../sample-spectra/added/Hydroquinone 99 percent 123-31-9 Run 11.dx?raw'
+import spectrum_28 from '../../sample-spectra/added/Lactose 63-42-3 run1_edited.jdx?raw'
+import spectrum_29 from '../../sample-spectra/added/R-Carvone-6485-40-11.dx?raw'
+import spectrum_30 from '../../sample-spectra/added/Resorcinol_edited.jdx?raw'
+import spectrum_31 from '../../sample-spectra/added/Water 7732-18-5 Run.dx?raw'
+import spectrum_32 from '../../sample-spectra/added/diethyl ether 60-29-7 run2_edited.jdx?raw'
+import spectrum_33 from '../../sample-spectra/added/n-Pentane 109-66-0.jdx?raw'
 
 export const SAMPLE_SPECTRA = [
   {
@@ -150,12 +151,12 @@ export const SAMPLE_SPECTRA = [
   },
   {
     id: '78-86-4',
-    name: '2-Chlorobutane 78-86-4 Run 11',
+    name: '2-Chlorobutane',
     casNumber: '78-86-4',
     names: null,
-    functionalGroups: [],
+    functionalGroups: ['Halide'],
     owner: null,
-    origin: null,
+    origin: 'College of the Sequoias',
     citation: null,
     jdxContent: spectrum_10,
   },
@@ -215,6 +216,17 @@ export const SAMPLE_SPECTRA = [
     jdxContent: spectrum_15,
   },
   {
+    id: '486-25-92',
+    name: '9-Fluorenone 486-25-92',
+    casNumber: '486-25-92',
+    names: null,
+    functionalGroups: [],
+    owner: null,
+    origin: null,
+    citation: null,
+    jdxContent: spectrum_16,
+  },
+  {
     id: '94-09-7',
     name: 'Benzocaine',
     casNumber: '94-09-7',
@@ -223,7 +235,7 @@ export const SAMPLE_SPECTRA = [
     owner: 'NIST Standard Reference Data Program\nCollection (C) 2018 copyright by the U.S. Secretary of Commerce\non behalf of the United States of America. All rights reserved.',
     origin: 'NIST Mass Spectrometry Data Center',
     citation: null,
-    jdxContent: spectrum_16,
+    jdxContent: spectrum_17,
   },
   {
     id: '60-35-5',
@@ -234,7 +246,7 @@ export const SAMPLE_SPECTRA = [
     owner: 'College of the Sequoias',
     origin: 'College of the Sequoias',
     citation: null,
-    jdxContent: spectrum_17,
+    jdxContent: spectrum_18,
   },
   {
     id: '67-64-1',
@@ -245,7 +257,7 @@ export const SAMPLE_SPECTRA = [
     owner: 'College of the Sequoias',
     origin: 'College of the Sequoias',
     citation: null,
-    jdxContent: spectrum_18,
+    jdxContent: spectrum_19,
   },
   {
     id: '22839-47-0',
@@ -256,7 +268,7 @@ export const SAMPLE_SPECTRA = [
     owner: null,
     origin: 'College of the Sequoias',
     citation: null,
-    jdxContent: spectrum_19,
+    jdxContent: spectrum_20,
   },
   {
     id: '100-52-7',
@@ -267,7 +279,7 @@ export const SAMPLE_SPECTRA = [
     owner: 'College of the Sequoias',
     origin: 'College of the Sequoias',
     citation: null,
-    jdxContent: spectrum_20,
+    jdxContent: spectrum_21,
   },
   {
     id: '55-21-0',
@@ -278,7 +290,7 @@ export const SAMPLE_SPECTRA = [
     owner: 'College of the Sequoias',
     origin: 'College of the Sequoias',
     citation: null,
-    jdxContent: spectrum_21,
+    jdxContent: spectrum_22,
   },
   {
     id: '134-81-6',
@@ -289,7 +301,7 @@ export const SAMPLE_SPECTRA = [
     owner: 'College of the Sequoias',
     origin: 'College of the Sequoias',
     citation: null,
-    jdxContent: spectrum_22,
+    jdxContent: spectrum_23,
   },
   {
     id: '58-08-21',
@@ -300,7 +312,7 @@ export const SAMPLE_SPECTRA = [
     owner: null,
     origin: 'College of the Sequoias',
     citation: null,
-    jdxContent: spectrum_23,
+    jdxContent: spectrum_24,
   },
   {
     id: '492-62-6',
@@ -311,7 +323,7 @@ export const SAMPLE_SPECTRA = [
     owner: 'College of the Sequoias',
     origin: 'College of the Sequoias',
     citation: null,
-    jdxContent: spectrum_24,
+    jdxContent: spectrum_25,
   },
   {
     id: '141-78-6-Ethyl-Acetate-141-78-6-jdx',
@@ -322,7 +334,7 @@ export const SAMPLE_SPECTRA = [
     owner: 'College of the Sequoias',
     origin: 'College of the Sequoias',
     citation: null,
-    jdxContent: spectrum_25,
+    jdxContent: spectrum_26,
   },
   {
     id: '123-31-9',
@@ -333,7 +345,7 @@ export const SAMPLE_SPECTRA = [
     owner: null,
     origin: 'College of the Sequoias',
     citation: null,
-    jdxContent: spectrum_26,
+    jdxContent: spectrum_27,
   },
   {
     id: '63-42-3',
@@ -344,7 +356,7 @@ export const SAMPLE_SPECTRA = [
     owner: 'College of the Sequoias',
     origin: 'College of the Sequoias',
     citation: null,
-    jdxContent: spectrum_27,
+    jdxContent: spectrum_28,
   },
   {
     id: '6485-40-11',
@@ -355,7 +367,7 @@ export const SAMPLE_SPECTRA = [
     owner: null,
     origin: 'College of the Sequoias',
     citation: null,
-    jdxContent: spectrum_28,
+    jdxContent: spectrum_29,
   },
   {
     id: '108-48-3',
@@ -366,7 +378,7 @@ export const SAMPLE_SPECTRA = [
     owner: null,
     origin: 'College of the Sequoias',
     citation: null,
-    jdxContent: spectrum_29,
+    jdxContent: spectrum_30,
   },
   {
     id: '7732-18-5',
@@ -377,7 +389,7 @@ export const SAMPLE_SPECTRA = [
     owner: null,
     origin: null,
     citation: null,
-    jdxContent: spectrum_30,
+    jdxContent: spectrum_31,
   },
   {
     id: '60-29-7',
@@ -388,7 +400,7 @@ export const SAMPLE_SPECTRA = [
     owner: 'College of the Sequoias',
     origin: 'College of the Sequoias',
     citation: null,
-    jdxContent: spectrum_31,
+    jdxContent: spectrum_32,
   },
   {
     id: '109-66-0',
@@ -399,6 +411,6 @@ export const SAMPLE_SPECTRA = [
     owner: 'College of the Sequoias',
     origin: 'College of the Sequoias',
     citation: null,
-    jdxContent: spectrum_32,
+    jdxContent: spectrum_33,
   }
 ]
