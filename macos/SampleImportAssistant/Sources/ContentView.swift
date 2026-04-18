@@ -180,6 +180,13 @@ struct ContentView: View {
                     .disabled(projectRoot == nil || decisionQueue.isEmpty)
                 Spacer()
             }
+            HStack {
+                Button("Clear prospective + queue") {
+                    clearProspectiveAndQueue()
+                }
+                .disabled(prospectiveFiles.isEmpty && decisionQueue.isEmpty)
+                Spacer()
+            }
         }
     }
 
@@ -255,7 +262,8 @@ struct ContentView: View {
                         fullFilePairedDiffView
                     }
                 }
-                .frame(minHeight: 240, maxHeight: 420)
+                // Keep comparison pane bounded so large diffs scroll in-place.
+                .frame(minHeight: 240, idealHeight: 320, maxHeight: 420)
             }
         } label: {
             Text("Side-by-side (yellow = different line)")
@@ -292,6 +300,8 @@ struct ContentView: View {
                             HStack(alignment: .top, spacing: 0) {
                                 Text(row.leftText)
                                     .font(.system(.body, design: .monospaced))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(.horizontal, 4)
                                     .padding(.vertical, 2)
@@ -299,6 +309,8 @@ struct ContentView: View {
                                 Divider()
                                 Text(row.rightText)
                                     .font(.system(.body, design: .monospaced))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(.horizontal, 4)
                                     .padding(.vertical, 2)
@@ -337,6 +349,8 @@ struct ContentView: View {
                             HStack(alignment: .top, spacing: 0) {
                                 Text(leftLines[i].text)
                                     .font(.system(.body, design: .monospaced))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(.horizontal, 4)
                                     .padding(.vertical, 1)
@@ -344,6 +358,8 @@ struct ContentView: View {
                                 Divider()
                                 Text(rightLines[i].text)
                                     .font(.system(.body, design: .monospaced))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
                                     .frame(maxWidth: .infinity, alignment: .leading)
                                     .padding(.horizontal, 4)
                                     .padding(.vertical, 1)
@@ -673,6 +689,19 @@ struct ContentView: View {
         analyzeBySource = analyzeBySource.filter { keysToDrop.contains($0.key) }
         replaceTargetBySource = replaceTargetBySource.filter { keysToDrop.contains($0.key) }
         syncSelection()
+    }
+
+    /// Clear all pending imports and queued decisions from the assistant UI.
+    private func clearProspectiveAndQueue() {
+        prospectiveFiles.removeAll()
+        decisionQueue.removeAll()
+        analyzeBySource.removeAll()
+        replaceTargetBySource.removeAll()
+        selectedFile = nil
+        leftLines = []
+        rightLines = []
+        metadataTagRows = []
+        statusMessage = "Cleared prospective imports and decision queue."
     }
 }
 
