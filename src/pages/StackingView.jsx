@@ -858,6 +858,12 @@ function SampleLibraryModal({ onAddSpectrum, onClose }) {
       })
     }
     return [...list].sort((a, b) => {
+      if (sortBy === 'cosFirst') {
+        const aCos = isCosSample(a) ? 0 : 1
+        const bCos = isCosSample(b) ? 0 : 1
+        if (aCos !== bCos) return aCos - bCos
+        return (a.name ?? '').localeCompare(b.name ?? '')
+      }
       if (sortBy === 'name') return (a.name ?? '').localeCompare(b.name ?? '')
       if (sortBy === 'cas') return (a.casNumber ?? '').localeCompare(b.casNumber ?? '')
       if (sortBy === 'functionalGroups') {
@@ -945,6 +951,7 @@ function SampleLibraryModal({ onAddSpectrum, onClose }) {
               <option value="name">Name</option>
               <option value="cas">CAS Registry No</option>
               <option value="functionalGroups">Functional groups</option>
+              <option value="cosFirst">COS</option>
             </select>
           </label>
         </div>
