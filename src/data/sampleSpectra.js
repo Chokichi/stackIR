@@ -19,7 +19,6 @@ import spectrum_12 from '../../sample-spectra/added/2-methyl-2-propanol 75-65-0 
 import spectrum_13 from '../../sample-spectra/added/592-42-7-IR.jdx?raw'
 import spectrum_14 from '../../sample-spectra/added/6630-86-0-IR.jdx?raw'
 import spectrum_15 from '../../sample-spectra/added/9-Fluorenone 486-25-91.dx?raw'
-import spectrum_16 from '../../sample-spectra/added/9-Fluorenone 486-25-92.dx?raw'
 import spectrum_17 from '../../sample-spectra/added/94-09-7-IR.jdx?raw'
 import spectrum_18 from '../../sample-spectra/added/Acetamide 60-35-5 run2_edited.jdx?raw'
 import spectrum_19 from '../../sample-spectra/added/Acetone 67-64-1.jdx?raw'
