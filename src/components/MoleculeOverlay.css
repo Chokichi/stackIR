@@ -1,0 +1,97 @@
+.molecule-overlay-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 40;
+}
+
+.molecule-overlay-card {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 6px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.molecule-overlay-card:active {
+  cursor: grabbing;
+}
+
+.molecule-overlay-card:hover .molecule-overlay-close,
+.molecule-overlay-card:hover .molecule-overlay-resize {
+  opacity: 1;
+}
+
+.molecule-overlay-svg {
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.molecule-overlay-svg svg {
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  display: block;
+}
+
+.molecule-overlay-close {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.95);
+  color: #333;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.5;
+  transition: opacity 0.15s ease;
+  z-index: 2;
+}
+
+.molecule-overlay-close:hover {
+  background: #ff5a5a;
+  color: #fff;
+  border-color: #ff5a5a;
+  opacity: 1;
+}
+
+.molecule-overlay-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 16px;
+  height: 16px;
+  cursor: nwse-resize;
+  background:
+    linear-gradient(135deg, transparent 50%, rgba(0, 0, 0, 0.55) 50%);
+  border-bottom-right-radius: 6px;
+  opacity: 0.5;
+  transition: opacity 0.15s ease;
+  z-index: 2;
+}
+
+.molecule-overlay-resize:hover {
+  opacity: 1;
+}

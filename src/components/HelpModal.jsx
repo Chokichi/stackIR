@@ -43,6 +43,16 @@ const HELP_CONTENT = {
           { term: 'Zoom', desc: 'Drag on the plot to zoom into a region. Keyboard: Z.' },
           { term: 'Reset zoom', desc: 'Restore full view and reset Y-axis. Keyboard: F.' },
           { term: 'Region', desc: 'Drag to add a shaded region between two wavenumbers. Keyboard: R.' },
+          { term: 'Insert (structure)', desc: 'Open the Ketcher molecule editor to draw a structure. Saved structures appear as draggable cards over the spectrum.' },
+        ],
+      },
+      {
+        title: 'Structure overlays',
+        items: [
+          { term: 'Move', desc: 'Click and drag a structure card to reposition it. Dragging on empty plot area still zooms or selects regions as usual.' },
+          { term: 'Resize', desc: 'Drag the bottom-right corner of a card to resize.' },
+          { term: 'Edit', desc: 'Double-click a structure to re-open it in the Ketcher editor.' },
+          { term: 'Delete', desc: 'Click the × in the top-right corner of a card. Overlays are saved in this browser.' },
         ],
       },
       {

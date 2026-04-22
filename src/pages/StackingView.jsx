@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo } from 'react'
+import { useState, useRef, useCallback, useEffect, useMemo, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { jsPDF } from 'jspdf'
@@ -14,8 +14,11 @@ import { normXToWavenumber, findLocalMinima, findLocalMaxima } from '../utils/sp
 import { isAbsorbance, getDisplayY } from '../utils/spectrumUnits'
 import { SpectrumDataDisplay } from '../components/SpectrumDataDisplay'
 import { HelpModal, HelpIcon } from '../components/HelpModal'
+import MoleculeOverlay from '../components/MoleculeOverlay'
 import { SAMPLE_SPECTRA } from '../data/sampleSpectra'
 import './StackingView.css'
+
+const MoleculeEditorModal = lazy(() => import('../components/MoleculeEditorModal'))
 
 // Export: 8.5x11" landscape at 300 DPI
 const EXPORT_DPI = 300
@@ -74,6 +77,17 @@ const PeakIcon = ({ size = 16 }) => (
 const RegionIcon = ({ size = 16 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <rect x="4" y="6" width="16" height="12" rx="1" fill="currentColor" fillOpacity="0.15" stroke="currentColor" />
+  </svg>
+)
+
+const MoleculeIcon = ({ size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="6" cy="7" r="2" />
+    <circle cx="18" cy="7" r="2" />
+    <circle cx="12" cy="17" r="2" />
+    <line x1="7.7" y1="8.2" x2="10.4" y2="15.8" />
+    <line x1="16.3" y1="8.2" x2="13.6" y2="15.8" />
+    <line x1="8" y1="7" x2="16" y2="7" />
   </svg>
 )
 
@@ -1043,7 +1057,13 @@ export default function StackingView() {
     setDistributedGap,
     calibrationBgColor,
     setCalibrationBgColor,
+    moleculeOverlays,
+    addMoleculeOverlay,
+    updateMoleculeOverlay,
+    removeMoleculeOverlay,
   } = useStacking()
+  const [moleculeEditorOpen, setMoleculeEditorOpen] = useState(false)
+  const [editingMoleculeId, setEditingMoleculeId] = useState(null)
   const [calibrationMode, setCalibrationMode] = useState(null)
   const [expandedAdjustId, setExpandedAdjustId] = useState(null)
   const [spectrumInfoId, setSpectrumInfoId] = useState(null)
@@ -1910,6 +1930,33 @@ export default function StackingView() {
     e.target.value = ''
   }, [handleAddJdxFile])
 
+  const openMoleculeEditor = useCallback((id = null) => {
+    setEditingMoleculeId(id)
+    setMoleculeEditorOpen(true)
+  }, [])
+
+  const closeMoleculeEditor = useCallback(() => {
+    setMoleculeEditorOpen(false)
+    setEditingMoleculeId(null)
+  }, [])
+
+  const handleMoleculeSave = useCallback(
+    ({ molfile, svg }) => {
+      if (editingMoleculeId) {
+        updateMoleculeOverlay(editingMoleculeId, { molfile, svg })
+      } else {
+        addMoleculeOverlay({ molfile, svg })
+      }
+      closeMoleculeEditor()
+    },
+    [editingMoleculeId, addMoleculeOverlay, updateMoleculeOverlay, closeMoleculeEditor]
+  )
+
+  const editingMoleculeMolfile = useMemo(
+    () => (editingMoleculeId ? moleculeOverlays.find((o) => o.id === editingMoleculeId)?.molfile ?? '' : ''),
+    [editingMoleculeId, moleculeOverlays]
+  )
+
   if (spectra.length === 0 && archivedSpectra.length === 0) {
     return (
       <div
@@ -2009,6 +2056,15 @@ export default function StackingView() {
           >
             <RegionIcon size={14} />
             <span>Region</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => openMoleculeEditor(null)}
+            className="tool-btn secondary btn-with-icon"
+            title="Insert a molecule structure overlay"
+          >
+            <MoleculeIcon size={14} />
+            <span>Insert</span>
           </button>
         </>
       )}
@@ -2173,6 +2229,20 @@ export default function StackingView() {
                 className="stacking-canvas"
                 style={{ background: '#ffffff' }}
               />
+            )}
+            {hasDataOnly && moleculeOverlays.length > 0 && (
+              <div className="molecule-overlay-layer" aria-label="Structure overlays">
+                {moleculeOverlays.map((overlay) => (
+                  <MoleculeOverlay
+                    key={overlay.id}
+                    overlay={overlay}
+                    wrapRef={displayWrapRef}
+                    onUpdate={updateMoleculeOverlay}
+                    onDelete={removeMoleculeOverlay}
+                    onEdit={openMoleculeEditor}
+                  />
+                ))}
+              </div>
             )}
             {touchRegionAdjustMode && dragSelect && hasDataOnly && (
               <div className="touch-region-adjust" role="region" aria-label="Adjust region boundaries">
@@ -2842,6 +2912,15 @@ export default function StackingView() {
         setDownloadName={setExportDownloadName}
       />
       <HelpModal open={helpModalOpen} onClose={() => setHelpModalOpen(false)} page="stacking" />
+      {moleculeEditorOpen && (
+        <Suspense fallback={null}>
+          <MoleculeEditorModal
+            initialMolfile={editingMoleculeMolfile}
+            onSave={handleMoleculeSave}
+            onClose={closeMoleculeEditor}
+          />
+        </Suspense>
+      )}
     </div>
   )
 }
