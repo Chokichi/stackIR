@@ -494,8 +494,62 @@ function buildExportAdjustmentNoteLines(spectra, visibleIds, zoomRange, chartWid
   return ['Adjustments (non-default):', ...lines, '']
 }
 
+/**
+ * Embed molecule overlay cards directly into the export SVG so exports are
+ * WYSIWYG. Coordinates are expressed as fractions of the chart's viewBox
+ * (which spans 0..svgWidth horizontally and 0..plotHeight vertically), so
+ * overlays stay pinned to the same spot on the chart regardless of the
+ * rendered output size.
+ */
+function appendMoleculeOverlaysToExportSvg(svgClone, overlays, svgWidth, plotHeight) {
+  if (!overlays?.length || !svgClone) return
+  const ns = 'http://www.w3.org/2000/svg'
+  const parser = new DOMParser()
+  for (const overlay of overlays) {
+    if (!overlay?.svg) continue
+    const x = overlay.xFrac * svgWidth
+    const y = overlay.yFrac * plotHeight
+    const w = overlay.widthFrac * svgWidth
+    const h = overlay.heightFrac * plotHeight
+    if (!(w > 0) || !(h > 0)) continue
+
+    const group = document.createElementNS(ns, 'g')
+
+    // White background + subtle border so exports match the on-screen card.
+    const bg = document.createElementNS(ns, 'rect')
+    bg.setAttribute('x', String(x))
+    bg.setAttribute('y', String(y))
+    bg.setAttribute('width', String(w))
+    bg.setAttribute('height', String(h))
+    bg.setAttribute('rx', '6')
+    bg.setAttribute('ry', '6')
+    bg.setAttribute('fill', '#ffffff')
+    bg.setAttribute('stroke', 'rgba(0,0,0,0.2)')
+    bg.setAttribute('stroke-width', '1')
+    group.appendChild(bg)
+
+    try {
+      const doc = parser.parseFromString(overlay.svg, 'image/svg+xml')
+      if (doc.querySelector('parsererror')) continue
+      const root = doc.documentElement
+      if (!root || root.nodeName.toLowerCase() !== 'svg') continue
+      root.setAttribute('x', String(x))
+      root.setAttribute('y', String(y))
+      root.setAttribute('width', String(w))
+      root.setAttribute('height', String(h))
+      root.setAttribute('preserveAspectRatio', 'xMidYMid meet')
+      const imported = svgClone.ownerDocument.importNode(root, true)
+      group.appendChild(imported)
+    } catch {
+      continue
+    }
+
+    svgClone.appendChild(group)
+  }
+}
+
 /** Build export SVG (chart + legend + optional list), return blob URL for preview. Returns null if not data-only or SVG not found. */
-function buildExportSvgBlobUrl(displayWrapRef, spectra, visibleIds, displayHeight, includeList, zoomRange) {
+function buildExportSvgBlobUrl(displayWrapRef, spectra, visibleIds, displayHeight, includeList, zoomRange, moleculeOverlays = []) {
   const wrap = displayWrapRef?.current
   const svg = wrap?.querySelector('.spectrum-data-display')
   if (!svg) return null
@@ -530,6 +584,7 @@ function buildExportSvgBlobUrl(displayWrapRef, spectra, visibleIds, displayHeigh
   }
   const { g: legendG2 } = createExportLegend(visibleDataSpectra, spectra, displayHeight, 800)
   svgClone.appendChild(legendG2)
+  appendMoleculeOverlaysToExportSvg(svgClone, moleculeOverlays, 800, displayHeight)
   const svgStr = new XMLSerializer().serializeToString(svgClone)
   const blob = new Blob([svgStr], { type: 'image/svg+xml' })
   return URL.createObjectURL(blob)
@@ -1709,14 +1764,15 @@ export default function StackingView() {
       visibleIds,
       displayHeight,
       exportIncludeList,
-      zoomRange
+      zoomRange,
+      moleculeOverlays
     )
     lastUrl = url
     if (url) setExportPreviewUrl(url)
     return () => {
       if (lastUrl) URL.revokeObjectURL(lastUrl)
     }
-  }, [exportModalOpen, hasDataOnly, spectra, visibleIds, displayHeight, exportIncludeList, zoomRange])
+  }, [exportModalOpen, hasDataOnly, spectra, visibleIds, displayHeight, exportIncludeList, zoomRange, moleculeOverlays])
 
   const handleDragEnter = useCallback((e) => {
     e.preventDefault()
@@ -1833,6 +1889,7 @@ export default function StackingView() {
           svgClone.appendChild(listG)
         }
         svgClone.appendChild(legendG)
+        appendMoleculeOverlaysToExportSvg(svgClone, moleculeOverlays, 800, origHeight)
         const svgStr = new XMLSerializer().serializeToString(svgClone)
         const blob = new Blob([svgStr], { type: 'image/svg+xml' })
         const url = URL.createObjectURL(blob)
@@ -1870,6 +1927,7 @@ export default function StackingView() {
       }
       const { g: legendG2 } = createExportLegend(visibleDataSpectra, spectra, baseHeight, 800)
       svgClone.appendChild(legendG2)
+      appendMoleculeOverlaysToExportSvg(svgClone, moleculeOverlays, 800, baseHeight)
       const svgStr = new XMLSerializer().serializeToString(svgClone)
       const blob = new Blob([svgStr], { type: 'image/svg+xml' })
       const url = URL.createObjectURL(blob)
@@ -1916,7 +1974,7 @@ export default function StackingView() {
         pdf.save(`${baseName}.pdf`)
       }
     }
-  }, [hasDataOnly, downloadFormat, spectra, visibleIds, displayHeight, exportDownloadName, zoomRange])
+  }, [hasDataOnly, downloadFormat, spectra, visibleIds, displayHeight, exportDownloadName, zoomRange, moleculeOverlays])
 
   const handleAddFromSampleLibrary = useCallback((spectrumData) => {
     setJdxError(null)

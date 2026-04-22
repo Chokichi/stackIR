@@ -14,4 +14,18 @@ export default defineConfig({
     'process.env': {},
     global: 'globalThis',
   },
+  build: {
+    // ketcher-core's published ESM bundle contains a literal
+    // `require('raphael')` call (guarded by `typeof window !== 'undefined'`).
+    // Rollup's CommonJS plugin ignores require() inside ES modules unless
+    // transformMixedEsModules is enabled, which left `require` in the
+    // production chunk and broke the Insert/Edit structure modal in
+    // deployed builds.
+    commonjsOptions: {
+      transformMixedEsModules: true,
+    },
+  },
+  optimizeDeps: {
+    include: ['ketcher-core', 'ketcher-react', 'ketcher-standalone', 'raphael'],
+  },
 })
