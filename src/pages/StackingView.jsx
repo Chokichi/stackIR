@@ -24,6 +24,7 @@ import {
   spectrumLineDash,
   resolveLineStyleId,
 } from '../utils/spectrumStyle'
+import { uniquifySvgIds } from '../utils/svgUtils'
 import './StackingView.css'
 
 const MoleculeEditorModal = lazy(() => import('../components/MoleculeEditorModal'))
@@ -770,7 +771,10 @@ function appendMoleculeOverlaysToExportSvg(svgClone, overlays, spectra, svgWidth
     }
 
     try {
-      const doc = parser.parseFromString(overlay.svg, 'image/svg+xml')
+      // Namespace ids / references before embedding so overlays don't share
+      // <defs> targets inside the combined export SVG (see svgUtils.js).
+      const scoped = uniquifySvgIds(overlay.svg, `molov-${overlay.id}`)
+      const doc = parser.parseFromString(scoped, 'image/svg+xml')
       if (doc.querySelector('parsererror')) continue
       const root = doc.documentElement
       if (!root || root.nodeName.toLowerCase() !== 'svg') continue

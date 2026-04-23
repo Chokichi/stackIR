@@ -3,6 +3,7 @@ import {
   spectrumLineColor as resolveSpectrumColor,
   spectrumLineDash,
 } from '../utils/spectrumStyle'
+import { uniquifySvgIds } from '../utils/svgUtils'
 import './MoleculeOverlay.css'
 
 const MIN_FRAC = 0.05
@@ -241,6 +242,14 @@ export default function MoleculeOverlay({
   }
 
   const hasLabel = Boolean(overlay.label && overlay.label.trim())
+  // Namespace every id / reference inside the embedded Ketcher SVG so that
+  // multiple overlays on the same page cannot clobber one another's
+  // <defs> / <use> targets (otherwise atom glyphs and styles from the most
+  // recently parsed overlay leak into every previous overlay).
+  const scopedSvg = useMemo(
+    () => uniquifySvgIds(overlay.svg, `molov-${overlay.id}`),
+    [overlay.svg, overlay.id]
+  )
   const pickerOptions = useMemo(
     () =>
       spectra.map((s, i) => ({
@@ -379,7 +388,7 @@ export default function MoleculeOverlay({
       </div>
       <div
         className="molecule-overlay-svg"
-        dangerouslySetInnerHTML={{ __html: overlay.svg }}
+        dangerouslySetInnerHTML={{ __html: scopedSvg }}
       />
       <button
         type="button"
