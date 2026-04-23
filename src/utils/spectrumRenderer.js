@@ -12,6 +12,16 @@ export function renderSpectrumToDataUrl(data, options = {}) {
   const height = options.height ?? 120
   const lineWidth = options.lineWidth ?? 1.5
   const invertY = options.invertY ?? true // IR transmittance: low = peak, invert so peaks point up
+  // Optional stroke-dasharray style (accepts an SVG-style string "6 4" or an
+  // array of numbers). Empty / missing means solid line.
+  const lineDash = (() => {
+    const d = options.lineDash
+    if (Array.isArray(d)) return d.filter((n) => Number.isFinite(n) && n >= 0)
+    if (typeof d === 'string' && d.trim()) {
+      return d.split(/[\s,]+/).filter(Boolean).map(Number).filter((n) => Number.isFinite(n) && n >= 0)
+    }
+    return []
+  })()
 
   const minX = Math.min(...x)
   const maxX = Math.max(...x)
@@ -47,6 +57,9 @@ export function renderSpectrumToDataUrl(data, options = {}) {
   ctx.lineWidth = lineWidth
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
+  if (lineDash.length > 0 && typeof ctx.setLineDash === 'function') {
+    ctx.setLineDash(lineDash)
+  }
   ctx.beginPath()
 
   const padX = 2

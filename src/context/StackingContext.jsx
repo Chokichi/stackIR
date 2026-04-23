@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useCallback, useEffect } from 'react'
 
 const STORAGE_KEY = 'bkg-remover-spectra'
+const OVERLAYS_STORAGE_KEY = 'bkg-remover-molecule-overlays'
 
 function loadFromStorage() {
   try {
@@ -31,12 +32,33 @@ function saveToStorage(spectra, visibleIds) {
   }
 }
 
+function loadOverlaysFromStorage() {
+  try {
+    const raw = localStorage.getItem(OVERLAYS_STORAGE_KEY)
+    if (!raw) return []
+    const data = JSON.parse(raw)
+    if (!Array.isArray(data)) return []
+    return data
+  } catch {
+    return []
+  }
+}
+
+function saveOverlaysToStorage(overlays) {
+  try {
+    localStorage.setItem(OVERLAYS_STORAGE_KEY, JSON.stringify(overlays))
+  } catch {
+    // ignore
+  }
+}
+
 const StackingContext = createContext(null)
 
 export function StackingProvider({ children }) {
   const [spectra, setSpectra] = useState([])
   const [visibleIds, setVisibleIds] = useState(new Set())
   const [archivedSpectra, setArchivedSpectra] = useState([])
+  const [moleculeOverlays, setMoleculeOverlays] = useState([])
 
   useEffect(() => {
     const loaded = loadFromStorage()
@@ -44,12 +66,18 @@ export function StackingProvider({ children }) {
       setSpectra(loaded.spectra)
       setVisibleIds(loaded.visibleIds)
     }
+    const storedOverlays = loadOverlaysFromStorage()
+    if (storedOverlays.length) setMoleculeOverlays(storedOverlays)
   }, [])
 
   useEffect(() => {
     if (spectra.length === 0) return
     saveToStorage(spectra, visibleIds)
   }, [spectra, visibleIds])
+
+  useEffect(() => {
+    saveOverlaysToStorage(moleculeOverlays)
+  }, [moleculeOverlays])
   const [overlayMode, setOverlayMode] = useState('stacked')
   const [distributedGap, setDistributedGap] = useState(40)
   const [calibrationBgColor, setCalibrationBgColor] = useState('#ffffff')
@@ -129,6 +157,36 @@ export function StackingProvider({ children }) {
     }
   }, [])
 
+  const addMoleculeOverlay = useCallback((overlay) => {
+    const id = overlay.id ?? crypto.randomUUID()
+    const full = {
+      id,
+      molfile: '',
+      svg: '',
+      xFrac: 0.65,
+      yFrac: 0.08,
+      widthFrac: 0.28,
+      heightFrac: 0.35,
+      ...overlay,
+    }
+    setMoleculeOverlays((prev) => [...prev, full])
+    return id
+  }, [])
+
+  const updateMoleculeOverlay = useCallback((id, updates) => {
+    setMoleculeOverlays((prev) =>
+      prev.map((o) => (o.id === id ? { ...o, ...updates } : o))
+    )
+  }, [])
+
+  const removeMoleculeOverlay = useCallback((id) => {
+    setMoleculeOverlays((prev) => prev.filter((o) => o.id !== id))
+  }, [])
+
+  const clearMoleculeOverlays = useCallback(() => {
+    setMoleculeOverlays([])
+  }, [])
+
   const value = {
     spectra,
     visibleIds,
@@ -148,6 +206,11 @@ export function StackingProvider({ children }) {
     toggleVisible,
     updateSpectrum,
     clearSpectra,
+    moleculeOverlays,
+    addMoleculeOverlay,
+    updateMoleculeOverlay,
+    removeMoleculeOverlay,
+    clearMoleculeOverlays,
   }
 
   return (
