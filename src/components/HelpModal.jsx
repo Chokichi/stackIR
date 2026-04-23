@@ -24,7 +24,8 @@ const HELP_CONTENT = {
         title: 'Spectra list (sidebar)',
         items: [
           { term: 'Show on plot', desc: 'The eye icon toggles whether that spectrum is drawn. Hidden spectra stay in the list.' },
-          { term: 'Line color', desc: 'Click or tap the color swatch beside a spectrum to open the color picker. Custom colors apply to the plot, stacked image exports, and SVG legend; they are saved with the spectrum in this browser.' },
+          { term: 'Line color', desc: 'Click or tap the color swatch beside a spectrum to open the color picker. The default palette is color-blind friendly with strong contrast on white. Custom colors apply to the plot, stacked image exports, and SVG legend; they are saved with the spectrum in this browser.' },
+          { term: 'Line style', desc: 'The small line swatch next to the color picker cycles through solid, dashed, dotted, and dash-dot patterns. Useful when colors alone are hard to distinguish (color-blind viewers, grayscale printing, or many overlapping spectra). The style is reflected in the plot and exported legends.' },
           { term: 'Active spectrum', desc: 'The round control marks the spectrum used for the Region tool and related edits. Only appears when you have JCAMP-DX data loaded.' },
           { term: 'Archive', desc: 'The × control moves a spectrum to the Archive tab. Use Restore to bring it back. The archive is cleared if you reload the page.' },
           { term: 'Metadata & Adjust', desc: 'Open JCAMP header details, fine-tune X/Y nudge and scale, and expand Peaks & Regions from the row controls.' },
@@ -43,7 +44,7 @@ const HELP_CONTENT = {
           { term: 'Zoom', desc: 'Drag on the plot to zoom into a region. Keyboard: Z.' },
           { term: 'Reset zoom', desc: 'Restore full view and reset Y-axis. Keyboard: F.' },
           { term: 'Region', desc: 'Drag to add a shaded region between two wavenumbers. Keyboard: R.' },
-          { term: 'Insert (structure)', desc: 'Open the Ketcher molecule editor to draw a structure. Saved structures appear as draggable cards over the spectrum.' },
+          { term: 'Insert (structure)', desc: 'Open the Ketcher molecule editor to draw a structure. You can add an optional label in the editor footer; saved structures appear as draggable cards over the spectrum and are included in exports.' },
         ],
       },
       {
@@ -52,6 +53,8 @@ const HELP_CONTENT = {
           { term: 'Move', desc: 'Click and drag a structure card to reposition it. Dragging on empty plot area still zooms or selects regions as usual.' },
           { term: 'Resize', desc: 'Drag the bottom-right corner of a card to resize.' },
           { term: 'Edit', desc: 'Double-click a structure to re-open it in the Ketcher editor.' },
+          { term: 'Label', desc: 'Click the caption at the top of a structure to add or rename its label. Labels appear on exports in the same position as on screen.' },
+          { term: 'Link border color', desc: 'Click the link icon next to the label and pick a spectrum to match its color. The border stays in sync if you later recolor that spectrum. Choose “None” to return to the default gray border.' },
           { term: 'Delete', desc: 'Click the × in the top-right corner of a card. Overlays are saved in this browser.' },
         ],
       },
@@ -74,8 +77,8 @@ const HELP_CONTENT = {
       {
         title: 'Export',
         items: [
-          { term: 'PNG / PDF', desc: 'Export the stacked spectra as an image. Colors match each spectrum\'s line color (default palette or your custom swatch).' },
-          { term: 'SVG', desc: 'Vector format (JCAMP-DX only). Optionally include peak/region list. Legend swatches use the same colors as the sidebar.' },
+          { term: 'PNG / PDF', desc: 'Export the stacked spectra as an image. Lines use each spectrum\'s color and line style (dashed / dotted / etc.), so plots stay readable in grayscale or for color-blind viewers.' },
+          { term: 'SVG', desc: 'Vector format (JCAMP-DX only). Optionally include peak/region list. The exported legend shows a mini line sample in the spectrum\'s color and dash pattern.' },
         ],
       },
       {

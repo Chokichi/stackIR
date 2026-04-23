@@ -386,6 +386,7 @@ export function SpectrumDataDisplay({
         result.push({
           pathD,
           color: spec.color ?? '#000',
+          dash: spec.dash ?? '',
           nudgeX: spec.nudgeX ?? 0,
           nudgeY: spec.nudgeY ?? 0,
         })
@@ -422,6 +423,7 @@ export function SpectrumDataDisplay({
       result.push({
         pathD,
         color: spec.color ?? '#000',
+        dash: spec.dash ?? '',
         nudgeX: spec.nudgeX ?? 0,
         nudgeY: spec.nudgeY ?? 0,
       })
@@ -592,7 +594,7 @@ export function SpectrumDataDisplay({
           )
         })}
       </g>
-      {paths.map(({ pathD, color, nudgeX = 0, nudgeY = 0 }, i) => (
+      {paths.map(({ pathD, color, dash = '', nudgeX = 0, nudgeY = 0 }, i) => (
         <g key={i} transform={`translate(${nudgeX}, ${nudgeY})`}>
           <path
             d={pathD}
@@ -601,6 +603,7 @@ export function SpectrumDataDisplay({
             strokeWidth={1.5}
             strokeLinecap="round"
             strokeLinejoin="round"
+            strokeDasharray={dash || undefined}
           />
         </g>
       ))}

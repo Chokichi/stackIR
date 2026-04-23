@@ -16,6 +16,14 @@ import { SpectrumDataDisplay } from '../components/SpectrumDataDisplay'
 import { HelpModal, HelpIcon } from '../components/HelpModal'
 import MoleculeOverlay from '../components/MoleculeOverlay'
 import { SAMPLE_SPECTRA } from '../data/sampleSpectra'
+import {
+  SPECTRUM_COLORS,
+  SPECTRUM_LINE_STYLES,
+  spectrumLineColor,
+  spectrumLineColorFromList,
+  spectrumLineDash,
+  resolveLineStyleId,
+} from '../utils/spectrumStyle'
 import './StackingView.css'
 
 const MoleculeEditorModal = lazy(() => import('../components/MoleculeEditorModal'))
@@ -106,25 +114,6 @@ const SettingsIcon = ({ size = 14 }) => (
   </svg>
 )
 
-// Darker, saturated colors for good contrast on white background
-const SPECTRUM_COLORS = [
-  '#b71c1c', '#1b5e20', '#0d47a1', '#4a148c', '#e65100',
-  '#006064', '#bf360c', '#311b92', '#33691e', '#4e342e',
-]
-
-/** Plot / legend color: optional per-spectrum `lineColor` (#rrggbb) or palette by list index. */
-function spectrumLineColor(spectrum, indexForPalette) {
-  const c = spectrum.lineColor
-  if (typeof c === 'string' && /^#[0-9A-Fa-f]{6}$/.test(c)) return c
-  const i = Math.max(0, indexForPalette ?? 0)
-  return SPECTRUM_COLORS[i % SPECTRUM_COLORS.length]
-}
-
-function spectrumLineColorFromList(spectrum, spectra) {
-  const idx = spectra.findIndex((s) => s.id === spectrum.id)
-  return spectrumLineColor(spectrum, idx >= 0 ? idx : 0)
-}
-
 const COS_LABEL = 'College of the Sequoias'
 function isCosSample(sample) {
   const o = (sample.owner || '').trim().toLowerCase()
@@ -138,22 +127,231 @@ function isCosSpectrum(spectrum) {
   return owner.includes(COS_LABEL.toLowerCase()) || origin.includes(COS_LABEL.toLowerCase())
 }
 
+/**
+ * Combined color + line-style picker.
+ *
+ * The trigger is a compact mini-line swatch showing the spectrum's current
+ * color *and* dash pattern. Clicking it opens a popover with:
+ *  - A grid of color-blind friendly palette swatches (default)
+ *  - A "custom" swatch that opens the native OS color picker for arbitrary hex
+ *  - A row of line-style swatches (solid / dashed / dotted / long dash / dash-dot / long dash-dot),
+ *    previewed in the spectrum's current color so the user sees exactly what they'll get.
+ */
+function SpectrumStylePicker({ spectrum, paletteIndex, label, onColorChange, onStyleChange }) {
+  const [open, setOpen] = useState(false)
+  const [popoverPos, setPopoverPos] = useState({ top: 0, left: 0 })
+  const triggerRef = useRef(null)
+  const popoverRef = useRef(null)
+  const colorInputRef = useRef(null)
+
+  const currentColor = spectrumLineColor(spectrum, paletteIndex)
+  const currentStyleId = resolveLineStyleId(spectrum)
+  const currentDash = spectrumLineDash(spectrum)
+  const hasPaletteMatch = SPECTRUM_COLORS.some(
+    (h) => h.toLowerCase() === currentColor.toLowerCase()
+  )
+
+  // Compute popover position relative to the viewport (fixed). We prefer
+  // below-and-left-aligned with the trigger, but flip / clamp to keep the
+  // popover fully on screen. Recomputes on scroll / resize while open.
+  const recomputePosition = useCallback(() => {
+    const trig = triggerRef.current
+    const pop = popoverRef.current
+    if (!trig) return
+    const GAP = 6
+    const MARGIN = 8
+    const rect = trig.getBoundingClientRect()
+    // Use measured popover size if already rendered; fall back to sensible
+    // defaults so the first paint still positions reasonably.
+    const popW = pop?.offsetWidth || 220
+    const popH = pop?.offsetHeight || 160
+    const vw = window.innerWidth
+    const vh = window.innerHeight
+
+    let left = rect.left
+    if (left + popW + MARGIN > vw) left = vw - popW - MARGIN
+    if (left < MARGIN) left = MARGIN
+
+    let top = rect.bottom + GAP
+    if (top + popH + MARGIN > vh) {
+      // Flip above if there's more room up there, otherwise clamp.
+      const above = rect.top - GAP - popH
+      top = above >= MARGIN ? above : Math.max(MARGIN, vh - popH - MARGIN)
+    }
+    setPopoverPos({ top, left })
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    recomputePosition()
+    const onPointerDown = (e) => {
+      const pop = popoverRef.current
+      const trig = triggerRef.current
+      if (pop && pop.contains(e.target)) return
+      if (trig && trig.contains(e.target)) return
+      setOpen(false)
+    }
+    const onKey = (e) => { if (e.key === 'Escape') setOpen(false) }
+    const onViewportChange = () => recomputePosition()
+    document.addEventListener('pointerdown', onPointerDown, true)
+    document.addEventListener('keydown', onKey)
+    // `capture: true` so we catch scrolls inside nested scroll containers
+    // (the sidebar has overflow-y: auto) in addition to the window.
+    window.addEventListener('scroll', onViewportChange, true)
+    window.addEventListener('resize', onViewportChange)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown, true)
+      document.removeEventListener('keydown', onKey)
+      window.removeEventListener('scroll', onViewportChange, true)
+      window.removeEventListener('resize', onViewportChange)
+    }
+  }, [open, recomputePosition])
+
+  // After the popover renders its real size, recompute once so the flip /
+  // clamp math uses the actual measurements instead of the fallback.
+  useEffect(() => {
+    if (open) recomputePosition()
+     
+  }, [open, spectrum, recomputePosition])
+
+  return (
+    <div className="spectrum-style-picker">
+      <button
+        type="button"
+        ref={triggerRef}
+        className="spectrum-style-trigger"
+        title="Line color and style"
+        aria-label={label}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => setOpen((o) => !o)}
+      >
+        <svg
+          viewBox="0 0 22 12"
+          width="22"
+          height="12"
+          aria-hidden="true"
+          focusable="false"
+        >
+          <line
+            x1="1"
+            y1="6"
+            x2="21"
+            y2="6"
+            stroke={currentColor}
+            strokeWidth="2.25"
+            strokeLinecap="round"
+            strokeDasharray={currentDash || undefined}
+          />
+        </svg>
+      </button>
+      {open && createPortal(
+        <div
+          ref={popoverRef}
+          className="spectrum-style-popover"
+          role="dialog"
+          aria-label={label}
+          style={{ top: popoverPos.top, left: popoverPos.left }}
+        >
+          <div className="spectrum-style-section-title">Color</div>
+          <div className="spectrum-style-color-grid">
+            {SPECTRUM_COLORS.map((hex) => {
+              const selected = currentColor.toLowerCase() === hex.toLowerCase()
+              return (
+                <button
+                  key={hex}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={selected}
+                  aria-label={`Color ${hex}`}
+                  title={hex}
+                  className={`spectrum-style-color-swatch ${selected ? 'is-selected' : ''}`}
+                  style={{ background: hex }}
+                  onClick={() => onColorChange(hex)}
+                />
+              )
+            })}
+            <label
+              className={`spectrum-style-color-swatch spectrum-style-color-custom ${hasPaletteMatch ? '' : 'is-selected'}`}
+              title="Pick a custom color"
+              style={hasPaletteMatch ? undefined : { background: currentColor }}
+            >
+              <input
+                ref={colorInputRef}
+                type="color"
+                className="spectrum-style-color-input-hidden"
+                value={currentColor}
+                onChange={(e) => onColorChange(e.target.value)}
+                aria-label={`Custom color for ${label}`}
+              />
+              {hasPaletteMatch && <span aria-hidden="true" className="spectrum-style-color-custom-plus">+</span>}
+            </label>
+          </div>
+          <div className="spectrum-style-section-title">Style</div>
+          <div className="spectrum-style-style-list">
+            {SPECTRUM_LINE_STYLES.map((opt) => {
+              const selected = opt.id === currentStyleId
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={selected}
+                  aria-label={opt.label}
+                  title={opt.label}
+                  className={`spectrum-style-style-swatch ${selected ? 'is-selected' : ''}`}
+                  onClick={() => onStyleChange(opt.id)}
+                >
+                  <svg
+                    viewBox="0 0 36 12"
+                    width="36"
+                    height="12"
+                    aria-hidden="true"
+                    focusable="false"
+                  >
+                    <line
+                      x1="2"
+                      y1="6"
+                      x2="34"
+                      y2="6"
+                      stroke={currentColor}
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeDasharray={opt.dash || undefined}
+                    />
+                  </svg>
+                </button>
+              )
+            })}
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  )
+}
+
 const CosBadge = ({ size = 'small', title = COS_LABEL }) => (
   <span className={`cos-badge cos-badge--${size}`} title={title}>COS</span>
 )
 
 const LEGEND_ROW_HEIGHT = 18
-const LEGEND_SWATCH_SIZE = 12
+/** Width of the mini-line swatch shown in exported legends. */
+const LEGEND_SWATCH_WIDTH = 22
 const LEGEND_PADDING = 16
 const LEGEND_RIGHT_PAD = 16
 
-/** Create SVG legend group (color swatch + name per spectrum), positioned bottom-right. Returns { g, height }. */
+/**
+ * Create SVG legend group for an export. Each row shows a short mini-line
+ * drawn with the spectrum's actual color AND dash pattern, so viewers can
+ * identify spectra without relying on color perception.
+ */
 function createExportLegend(visibleDataSpectra, spectra, baseY, svgWidth = 800) {
   const ns = 'http://www.w3.org/2000/svg'
   const g = document.createElementNS(ns, 'g')
   g.setAttribute('class', 'export-legend')
   if (visibleDataSpectra.length === 0) return { g, height: 0 }
-  const legendWidth = LEGEND_SWATCH_SIZE + 6 + 180
+  const legendWidth = LEGEND_SWATCH_WIDTH + 6 + 180
   const legendX = svgWidth - LEGEND_RIGHT_PAD - legendWidth
   const legendTop = baseY + LEGEND_PADDING
   const height = visibleDataSpectra.length * LEGEND_ROW_HEIGHT + LEGEND_PADDING * 2
@@ -162,23 +360,25 @@ function createExportLegend(visibleDataSpectra, spectra, baseY, svgWidth = 800) 
     const showCos = fullSpec && isCosSpectrum(fullSpec)
     const idx = spectra.findIndex((s) => s.id === spec.id)
     const color = spectrumLineColor(fullSpec ?? spec, idx >= 0 ? idx : i)
+    const dash = spectrumLineDash(fullSpec ?? spec)
     const rowY = legendTop + i * LEGEND_ROW_HEIGHT + LEGEND_ROW_HEIGHT / 2
-    const rect = document.createElementNS(ns, 'rect')
-    rect.setAttribute('x', legendX)
-    rect.setAttribute('y', rowY - LEGEND_SWATCH_SIZE / 2)
-    rect.setAttribute('width', LEGEND_SWATCH_SIZE)
-    rect.setAttribute('height', LEGEND_SWATCH_SIZE)
-    rect.setAttribute('fill', color)
-    rect.setAttribute('stroke', '#555')
-    rect.setAttribute('stroke-width', '1')
+    const line = document.createElementNS(ns, 'line')
+    line.setAttribute('x1', legendX)
+    line.setAttribute('y1', rowY)
+    line.setAttribute('x2', legendX + LEGEND_SWATCH_WIDTH)
+    line.setAttribute('y2', rowY)
+    line.setAttribute('stroke', color)
+    line.setAttribute('stroke-width', '2')
+    line.setAttribute('stroke-linecap', 'round')
+    if (dash) line.setAttribute('stroke-dasharray', dash)
     const t = document.createElementNS(ns, 'text')
-    t.setAttribute('x', legendX + LEGEND_SWATCH_SIZE + 6)
+    t.setAttribute('x', legendX + LEGEND_SWATCH_WIDTH + 6)
     t.setAttribute('y', rowY + 4)
     t.setAttribute('font-size', '12')
     t.setAttribute('font-family', 'system-ui, sans-serif')
     t.setAttribute('fill', '#333')
     t.textContent = (spec.fileName || `Spectrum ${i + 1}`) + (showCos ? ' COS' : '')
-    g.appendChild(rect)
+    g.appendChild(line)
     g.appendChild(t)
   })
   return { g, height }
@@ -501,7 +701,7 @@ function buildExportAdjustmentNoteLines(spectra, visibleIds, zoomRange, chartWid
  * overlays stay pinned to the same spot on the chart regardless of the
  * rendered output size.
  */
-function appendMoleculeOverlaysToExportSvg(svgClone, overlays, svgWidth, plotHeight) {
+function appendMoleculeOverlaysToExportSvg(svgClone, overlays, spectra, svgWidth, plotHeight) {
   if (!overlays?.length || !svgClone) return
   const ns = 'http://www.w3.org/2000/svg'
   const parser = new DOMParser()
@@ -513,9 +713,32 @@ function appendMoleculeOverlaysToExportSvg(svgClone, overlays, svgWidth, plotHei
     const h = overlay.heightFrac * plotHeight
     if (!(w > 0) || !(h > 0)) continue
 
+    const label = typeof overlay.label === 'string' ? overlay.label.trim() : ''
+    // Reserve a strip at the top of the card for the label, matching the
+    // on-screen layout where the label sits above the structure.
+    const labelFontSize = Math.max(10, Math.min(14, h * 0.09))
+    const labelHeight = label ? labelFontSize * 1.8 : 0
+    const structY = y + labelHeight
+    const structH = Math.max(1, h - labelHeight)
+
+    // Link the card border to a spectrum's current resolved color if the
+    // overlay opts into it; otherwise fall back to the default subtle border.
+    // When linked we also mirror the spectrum's line style (dash pattern) so
+    // the exported card matches the on-screen WYSIWYG appearance.
+    let borderColor = 'rgba(0,0,0,0.2)'
+    let borderWidth = 1
+    let borderDash = ''
+    if (overlay.linkedSpectrumId && Array.isArray(spectra)) {
+      const idx = spectra.findIndex((s) => s.id === overlay.linkedSpectrumId)
+      if (idx >= 0) {
+        borderColor = spectrumLineColor(spectra[idx], idx)
+        borderWidth = 1.6
+        borderDash = spectrumLineDash(spectra[idx]) || ''
+      }
+    }
+
     const group = document.createElementNS(ns, 'g')
 
-    // White background + subtle border so exports match the on-screen card.
     const bg = document.createElementNS(ns, 'rect')
     bg.setAttribute('x', String(x))
     bg.setAttribute('y', String(y))
@@ -524,9 +747,27 @@ function appendMoleculeOverlaysToExportSvg(svgClone, overlays, svgWidth, plotHei
     bg.setAttribute('rx', '6')
     bg.setAttribute('ry', '6')
     bg.setAttribute('fill', '#ffffff')
-    bg.setAttribute('stroke', 'rgba(0,0,0,0.2)')
-    bg.setAttribute('stroke-width', '1')
+    bg.setAttribute('stroke', borderColor)
+    bg.setAttribute('stroke-width', String(borderWidth))
+    if (borderDash) {
+      bg.setAttribute('stroke-dasharray', borderDash)
+      bg.setAttribute('stroke-linecap', 'round')
+      bg.setAttribute('stroke-linejoin', 'round')
+    }
     group.appendChild(bg)
+
+    if (label) {
+      const text = document.createElementNS(ns, 'text')
+      text.setAttribute('x', String(x + w / 2))
+      text.setAttribute('y', String(y + labelHeight * 0.72))
+      text.setAttribute('text-anchor', 'middle')
+      text.setAttribute('font-size', String(labelFontSize))
+      text.setAttribute('font-family', 'system-ui, -apple-system, sans-serif')
+      text.setAttribute('fill', '#222')
+      const maxChars = Math.max(3, Math.floor(w / (labelFontSize * 0.55)))
+      text.textContent = label.length > maxChars ? label.slice(0, Math.max(1, maxChars - 1)) + '…' : label
+      group.appendChild(text)
+    }
 
     try {
       const doc = parser.parseFromString(overlay.svg, 'image/svg+xml')
@@ -534,9 +775,9 @@ function appendMoleculeOverlaysToExportSvg(svgClone, overlays, svgWidth, plotHei
       const root = doc.documentElement
       if (!root || root.nodeName.toLowerCase() !== 'svg') continue
       root.setAttribute('x', String(x))
-      root.setAttribute('y', String(y))
+      root.setAttribute('y', String(structY))
       root.setAttribute('width', String(w))
-      root.setAttribute('height', String(h))
+      root.setAttribute('height', String(structH))
       root.setAttribute('preserveAspectRatio', 'xMidYMid meet')
       const imported = svgClone.ownerDocument.importNode(root, true)
       group.appendChild(imported)
@@ -584,7 +825,7 @@ function buildExportSvgBlobUrl(displayWrapRef, spectra, visibleIds, displayHeigh
   }
   const { g: legendG2 } = createExportLegend(visibleDataSpectra, spectra, displayHeight, 800)
   svgClone.appendChild(legendG2)
-  appendMoleculeOverlaysToExportSvg(svgClone, moleculeOverlays, 800, displayHeight)
+  appendMoleculeOverlaysToExportSvg(svgClone, moleculeOverlays, spectra, 800, displayHeight)
   const svgStr = new XMLSerializer().serializeToString(svgClone)
   const blob = new Blob([svgStr], { type: 'image/svg+xml' })
   return URL.createObjectURL(blob)
@@ -1889,7 +2130,7 @@ export default function StackingView() {
           svgClone.appendChild(listG)
         }
         svgClone.appendChild(legendG)
-        appendMoleculeOverlaysToExportSvg(svgClone, moleculeOverlays, 800, origHeight)
+        appendMoleculeOverlaysToExportSvg(svgClone, moleculeOverlays, spectra, 800, origHeight)
         const svgStr = new XMLSerializer().serializeToString(svgClone)
         const blob = new Blob([svgStr], { type: 'image/svg+xml' })
         const url = URL.createObjectURL(blob)
@@ -1927,7 +2168,7 @@ export default function StackingView() {
       }
       const { g: legendG2 } = createExportLegend(visibleDataSpectra, spectra, baseHeight, 800)
       svgClone.appendChild(legendG2)
-      appendMoleculeOverlaysToExportSvg(svgClone, moleculeOverlays, 800, baseHeight)
+      appendMoleculeOverlaysToExportSvg(svgClone, moleculeOverlays, spectra, 800, baseHeight)
       const svgStr = new XMLSerializer().serializeToString(svgClone)
       const blob = new Blob([svgStr], { type: 'image/svg+xml' })
       const url = URL.createObjectURL(blob)
@@ -1989,9 +2230,21 @@ export default function StackingView() {
   }, [handleAddJdxFile])
 
   const openMoleculeEditor = useCallback((id = null) => {
+    console.log('[StackingView] openMoleculeEditor called', { id })
+    if (id) {
+      const overlay = moleculeOverlays.find((o) => o.id === id)
+      console.log('[StackingView] editing overlay:', {
+        id,
+        found: !!overlay,
+        hasMolfile: !!overlay?.molfile,
+        molfileLen: overlay?.molfile?.length ?? 0,
+        molfilePreview: overlay?.molfile?.slice(0, 200),
+        label: overlay?.label,
+      })
+    }
     setEditingMoleculeId(id)
     setMoleculeEditorOpen(true)
-  }, [])
+  }, [moleculeOverlays])
 
   const closeMoleculeEditor = useCallback(() => {
     setMoleculeEditorOpen(false)
@@ -1999,21 +2252,31 @@ export default function StackingView() {
   }, [])
 
   const handleMoleculeSave = useCallback(
-    ({ molfile, svg }) => {
+    ({ molfile, svg, label }) => {
+      const cleanLabel = typeof label === 'string' ? label.trim() : ''
+      console.log('[StackingView] handleMoleculeSave', {
+        editingMoleculeId,
+        molfileLen: molfile?.length ?? 0,
+        molfilePreview: molfile?.slice(0, 200),
+        svgLen: svg?.length ?? 0,
+        label: cleanLabel,
+      })
       if (editingMoleculeId) {
-        updateMoleculeOverlay(editingMoleculeId, { molfile, svg })
+        updateMoleculeOverlay(editingMoleculeId, { molfile, svg, label: cleanLabel })
       } else {
-        addMoleculeOverlay({ molfile, svg })
+        addMoleculeOverlay({ molfile, svg, label: cleanLabel })
       }
       closeMoleculeEditor()
     },
     [editingMoleculeId, addMoleculeOverlay, updateMoleculeOverlay, closeMoleculeEditor]
   )
 
-  const editingMoleculeMolfile = useMemo(
-    () => (editingMoleculeId ? moleculeOverlays.find((o) => o.id === editingMoleculeId)?.molfile ?? '' : ''),
+  const editingMolecule = useMemo(
+    () => (editingMoleculeId ? moleculeOverlays.find((o) => o.id === editingMoleculeId) : null),
     [editingMoleculeId, moleculeOverlays]
   )
+  const editingMoleculeMolfile = editingMolecule?.molfile ?? ''
+  const editingMoleculeLabel = editingMolecule?.label ?? ''
 
   if (spectra.length === 0 && archivedSpectra.length === 0) {
     return (
@@ -2255,6 +2518,7 @@ export default function StackingView() {
                 spectra={visibleDataSpectra.map((s) => ({
                   ...s,
                   color: spectrumLineColorFromList(s, spectra),
+                  dash: spectrumLineDash(s),
                 }))}
                 width={800}
                 height={displayHeight}
@@ -2295,6 +2559,7 @@ export default function StackingView() {
                     key={overlay.id}
                     overlay={overlay}
                     wrapRef={displayWrapRef}
+                    spectra={spectra}
                     onUpdate={updateMoleculeOverlay}
                     onDelete={removeMoleculeOverlay}
                     onEdit={openMoleculeEditor}
@@ -2497,27 +2762,6 @@ export default function StackingView() {
                 >
                   <EyeIcon visible={visibleIds.has(s.id)} />
                 </button>
-                {hasDataOnly && (
-                  <label className="spectrum-active-check">
-                    <input
-                      type="radio"
-                      name="active-spectrum"
-                      checked={activeSpectrumId === s.id}
-                      onChange={() => setActiveSpectrumId(s.id)}
-                    />
-                    <span className="spectrum-active-dot" title="Active for region selection" />
-                  </label>
-                )}
-                <label className="spectrum-color-picker" title="Change line color">
-                  <input
-                    type="color"
-                    className="spectrum-color-input-hidden"
-                    value={spectrumLineColor(s, i)}
-                    onChange={(e) => updateSpectrum(s.id, { lineColor: e.target.value })}
-                    aria-label={`Line color for ${s.fileName || `spectrum ${i + 1}`}`}
-                  />
-                  <span className="spectrum-color" style={{ background: spectrumLineColor(s, i) }} />
-                </label>
                 <span className="spectrum-name">
                   {s.fileName || `Spectrum ${i + 1}`}
                   {isCosSpectrum(s) && <CosBadge size="small" />}
@@ -2533,6 +2777,24 @@ export default function StackingView() {
                 </button>
               </div>
               <div className="spectrum-meta">
+                {hasDataOnly && (
+                  <label className="spectrum-active-check" title="Active for region selection">
+                    <input
+                      type="radio"
+                      name="active-spectrum"
+                      checked={activeSpectrumId === s.id}
+                      onChange={() => setActiveSpectrumId(s.id)}
+                    />
+                    <span className="spectrum-active-dot" />
+                  </label>
+                )}
+                <SpectrumStylePicker
+                  spectrum={s}
+                  paletteIndex={i}
+                  label={`Line color and style for ${s.fileName || `spectrum ${i + 1}`}`}
+                  onColorChange={(color) => updateSpectrum(s.id, { lineColor: color })}
+                  onStyleChange={(styleId) => updateSpectrum(s.id, { lineStyle: styleId })}
+                />
                 {s.data || s.jdxWavenumberRange ? (
                   <>
                     {s.jdxWavenumberRange && !s.data && <span className="hint">JDX (auto-calibrated)</span>}
@@ -2543,7 +2805,7 @@ export default function StackingView() {
                       title="View JCAMP-DX metadata"
                       aria-label="View metadata"
                     >
-                      <InfoIcon size={14} />
+                      <InfoIcon size={18} />
                     </button>
                     <button
                       type="button"
@@ -2877,16 +3139,13 @@ export default function StackingView() {
                 archivedSpectra.map((s, i) => (
                   <div key={s.id} className="spectrum-item archive-item">
                     <div className="spectrum-toggle">
-                      <label className="spectrum-color-picker" title="Change line color (kept when you restore)">
-                        <input
-                          type="color"
-                          className="spectrum-color-input-hidden"
-                          value={spectrumLineColor(s, i)}
-                          onChange={(e) => updateArchivedSpectrum(s.id, { lineColor: e.target.value })}
-                          aria-label={`Line color for ${s.fileName || `spectrum ${i + 1}`}`}
-                        />
-                        <span className="spectrum-color" style={{ background: spectrumLineColor(s, i) }} />
-                      </label>
+                      <SpectrumStylePicker
+                        spectrum={s}
+                        paletteIndex={i}
+                        label={`Line color and style for ${s.fileName || `spectrum ${i + 1}`}`}
+                        onColorChange={(color) => updateArchivedSpectrum(s.id, { lineColor: color })}
+                        onStyleChange={(styleId) => updateArchivedSpectrum(s.id, { lineStyle: styleId })}
+                      />
                       <span className="spectrum-name">{s.fileName || `Spectrum ${i + 1}`}</span>
                     </div>
                     <button
@@ -2974,6 +3233,7 @@ export default function StackingView() {
         <Suspense fallback={null}>
           <MoleculeEditorModal
             initialMolfile={editingMoleculeMolfile}
+            initialLabel={editingMoleculeLabel}
             onSave={handleMoleculeSave}
             onClose={closeMoleculeEditor}
           />
