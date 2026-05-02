@@ -702,6 +702,19 @@ function buildExportAdjustmentNoteLines(spectra, visibleIds, zoomRange, chartWid
  * overlays stay pinned to the same spot on the chart regardless of the
  * rendered output size.
  */
+/**
+ * A molecule overlay is hidden along with its linked spectrum so the chart
+ * stays uncluttered when the user toggles a spectrum off. Overlays that are
+ * unlinked, or that reference a deleted spectrum (orphan link), stay visible.
+ */
+function isOverlayVisible(overlay, spectra, visibleIds) {
+  const linkedId = overlay?.linkedSpectrumId
+  if (!linkedId) return true
+  const exists = Array.isArray(spectra) && spectra.some((s) => s.id === linkedId)
+  if (!exists) return true
+  return visibleIds?.has?.(linkedId) ?? true
+}
+
 function appendMoleculeOverlaysToExportSvg(svgClone, overlays, spectra, svgWidth, plotHeight) {
   if (!overlays?.length || !svgClone) return
   const ns = 'http://www.w3.org/2000/svg'
@@ -829,7 +842,8 @@ function buildExportSvgBlobUrl(displayWrapRef, spectra, visibleIds, displayHeigh
   }
   const { g: legendG2 } = createExportLegend(visibleDataSpectra, spectra, displayHeight, 800)
   svgClone.appendChild(legendG2)
-  appendMoleculeOverlaysToExportSvg(svgClone, moleculeOverlays, spectra, 800, displayHeight)
+  const exportableOverlays = moleculeOverlays.filter((o) => isOverlayVisible(o, spectra, visibleIds))
+  appendMoleculeOverlaysToExportSvg(svgClone, exportableOverlays, spectra, 800, displayHeight)
   const svgStr = new XMLSerializer().serializeToString(svgClone)
   const blob = new Blob([svgStr], { type: 'image/svg+xml' })
   return URL.createObjectURL(blob)
@@ -2067,6 +2081,9 @@ export default function StackingView() {
     const effectiveFormat = !hasDataOnly && format === 'svg' ? 'png' : format
     const baseName = (downloadName || 'spectra-stacked').trim().replace(/[/\\:*?"<>|]/g, '-') || 'spectra-stacked'
     const listText = hasDataOnly && includeList ? buildPeakRegionList(spectra, visibleIds, zoomRange) : ''
+    // Mirror the on-screen filter so cards linked to a hidden spectrum are
+    // omitted from PNG / SVG / PDF exports as well.
+    const exportableOverlays = moleculeOverlays.filter((o) => isOverlayVisible(o, spectra, visibleIds))
     const addImageToPdf = (pdf, imgData) => {
       pdf.addImage(imgData, 'PNG', 0, 0, EXPORT_WIDTH_IN, EXPORT_HEIGHT_IN)
     }
@@ -2134,7 +2151,7 @@ export default function StackingView() {
           svgClone.appendChild(listG)
         }
         svgClone.appendChild(legendG)
-        appendMoleculeOverlaysToExportSvg(svgClone, moleculeOverlays, spectra, 800, origHeight)
+        appendMoleculeOverlaysToExportSvg(svgClone, exportableOverlays, spectra, 800, origHeight)
         const svgStr = new XMLSerializer().serializeToString(svgClone)
         const blob = new Blob([svgStr], { type: 'image/svg+xml' })
         const url = URL.createObjectURL(blob)
@@ -2172,7 +2189,7 @@ export default function StackingView() {
       }
       const { g: legendG2 } = createExportLegend(visibleDataSpectra, spectra, baseHeight, 800)
       svgClone.appendChild(legendG2)
-      appendMoleculeOverlaysToExportSvg(svgClone, moleculeOverlays, spectra, 800, baseHeight)
+      appendMoleculeOverlaysToExportSvg(svgClone, exportableOverlays, spectra, 800, baseHeight)
       const svgStr = new XMLSerializer().serializeToString(svgClone)
       const blob = new Blob([svgStr], { type: 'image/svg+xml' })
       const url = URL.createObjectURL(blob)
@@ -2558,17 +2575,19 @@ export default function StackingView() {
             )}
             {hasDataOnly && moleculeOverlays.length > 0 && (
               <div className="molecule-overlay-layer" aria-label="Structure overlays">
-                {moleculeOverlays.map((overlay) => (
-                  <MoleculeOverlay
-                    key={overlay.id}
-                    overlay={overlay}
-                    wrapRef={displayWrapRef}
-                    spectra={spectra}
-                    onUpdate={updateMoleculeOverlay}
-                    onDelete={removeMoleculeOverlay}
-                    onEdit={openMoleculeEditor}
-                  />
-                ))}
+                {moleculeOverlays
+                  .filter((overlay) => isOverlayVisible(overlay, spectra, visibleIds))
+                  .map((overlay) => (
+                    <MoleculeOverlay
+                      key={overlay.id}
+                      overlay={overlay}
+                      wrapRef={displayWrapRef}
+                      spectra={spectra}
+                      onUpdate={updateMoleculeOverlay}
+                      onDelete={removeMoleculeOverlay}
+                      onEdit={openMoleculeEditor}
+                    />
+                  ))}
               </div>
             )}
             {touchRegionAdjustMode && dragSelect && hasDataOnly && (
