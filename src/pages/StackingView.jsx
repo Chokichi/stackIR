@@ -46,6 +46,9 @@ const Y_SCALE_MAX = 10
 /** Range inputs for distributed vertical gap (px); keep desktop + settings in sync. */
 const DISTRIBUTED_GAP_MIN = -420
 const DISTRIBUTED_GAP_MAX = 120
+/** Default / min width (px) for the centered stacking shell; drag left/right edges to widen. */
+const STACKING_SHELL_DEFAULT_WIDTH = 900
+const STACKING_SHELL_MIN_WIDTH = 900
 
 const EyeIcon = ({ visible = true, size = 14 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1408,9 +1411,11 @@ export default function StackingView() {
   const [collapsedPeakGroups, setCollapsedPeakGroups] = useState(new Set()) // Set of 'spectrumId-groupId'
   const [displayHeight, setDisplayHeight] = useState(BASE_DISPLAY_HEIGHT)
   const [sidebarWidth, setSidebarWidth] = useState(200)
+  const [shellMaxWidth, setShellMaxWidth] = useState(STACKING_SHELL_DEFAULT_WIDTH)
   const [sidebarTab, setSidebarTab] = useState('spectra')
   const [sampleLibraryOpen, setSampleLibraryOpen] = useState(false)
   const resizeStartRef = useRef(null)
+  const shellLayoutResizeRef = useRef(null)
   const canvasRef = useRef(null)
   const fullBufferRef = useRef(null)
   const jdxInputRef = useRef(null)
@@ -1950,6 +1955,15 @@ export default function StackingView() {
     resizeStartRef.current = { x: e.clientX, width: sidebarWidth }
   }, [sidebarWidth])
 
+  const handleShellLayoutResizeStart = useCallback(
+    (edge) => (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      shellLayoutResizeRef.current = { edge, originX: e.clientX, originW: shellMaxWidth }
+    },
+    [shellMaxWidth]
+  )
+
   useEffect(() => {
     const handleResizeMove = (e) => {
       const start = resizeStartRef.current
@@ -1966,6 +1980,25 @@ export default function StackingView() {
     return () => {
       window.removeEventListener('mousemove', handleResizeMove)
       window.removeEventListener('mouseup', handleResizeEnd)
+    }
+  }, [])
+
+  useEffect(() => {
+    const handleShellMove = (e) => {
+      const drag = shellLayoutResizeRef.current
+      if (!drag) return
+      const maxW = Math.max(STACKING_SHELL_MIN_WIDTH, window.innerWidth - 32)
+      const dw = drag.edge === 'right' ? e.clientX - drag.originX : drag.originX - e.clientX
+      setShellMaxWidth(Math.min(maxW, Math.max(STACKING_SHELL_MIN_WIDTH, drag.originW + dw)))
+    }
+    const handleShellEnd = () => {
+      shellLayoutResizeRef.current = null
+    }
+    window.addEventListener('mousemove', handleShellMove)
+    window.addEventListener('mouseup', handleShellEnd)
+    return () => {
+      window.removeEventListener('mousemove', handleShellMove)
+      window.removeEventListener('mouseup', handleShellEnd)
     }
   }, [])
 
@@ -2299,15 +2332,37 @@ export default function StackingView() {
   const editingMoleculeMolfile = editingMolecule?.molfile ?? ''
   const editingMoleculeLabel = editingMolecule?.label ?? ''
 
+  const stackingShellRootStyle = useMemo(
+    () => ({
+      position: 'relative',
+      maxWidth: `min(${shellMaxWidth}px, calc(100vw - 3rem))`,
+      width: '100%',
+    }),
+    [shellMaxWidth]
+  )
+
   if (spectra.length === 0 && archivedSpectra.length === 0) {
     return (
       <div
         className="app stacking-empty"
+        style={stackingShellRootStyle}
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
+        <div
+          className="stacking-shell-resize-handle stacking-shell-resize-handle--left"
+          onMouseDown={handleShellLayoutResizeStart('left')}
+          title="Drag to widen layout"
+          aria-label="Drag left edge to widen layout"
+        />
+        <div
+          className="stacking-shell-resize-handle stacking-shell-resize-handle--right"
+          onMouseDown={handleShellLayoutResizeStart('right')}
+          title="Drag to widen layout"
+          aria-label="Drag right edge to widen layout"
+        />
         {isDragActive && (
           <div className="stacking-drop-overlay" aria-hidden="true">
             <div className="stacking-drop-overlay-content">Drop JCAMP-DX file to add</div>
@@ -2428,11 +2483,24 @@ export default function StackingView() {
   return (
     <div
       className="app stacking-view"
+      style={stackingShellRootStyle}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
+      <div
+        className="stacking-shell-resize-handle stacking-shell-resize-handle--left"
+        onMouseDown={handleShellLayoutResizeStart('left')}
+        title="Drag to widen layout"
+        aria-label="Drag left edge to widen layout"
+      />
+      <div
+        className="stacking-shell-resize-handle stacking-shell-resize-handle--right"
+        onMouseDown={handleShellLayoutResizeStart('right')}
+        title="Drag to widen layout"
+        aria-label="Drag right edge to widen layout"
+      />
       {isDragActive && (
         <div className="stacking-drop-overlay" aria-hidden="true">
           <div className="stacking-drop-overlay-content">Drop JCAMP-DX file to add</div>

@@ -493,14 +493,35 @@ export function SpectrumDataDisplay({
         }
         return applyScaleY(y, spec.scaleY, displayYUnits)
       }
-      const allY = visible.flatMap(prepareData)
-      const baseMinY = normalizeY ? 0 : Math.min(...allY)
-      let baseMaxY = Math.max(...allY, 1)
-      if (!normalizeY && baseMaxY > 1) {
-        baseMaxY = baseMaxY + Math.max(0.02, (baseMaxY - 1) * 0.05)
+      // With normalization on, each spectrum is drawn 0–1 inside the plot and
+      // fills the chart vertically. Label the y-axis with the *active* spectrum's
+      // actual (un-normalized) transmittance range so ticks reflect real values
+      // while the curve continues to use the full chart space. yMinOffset shifts
+      // the data plot in normalized space, so map it through the actual range.
+      const activeSpec = normalizeY && activeSpectrumId
+        ? visible.find((s) => s.id === activeSpectrumId)
+        : null
+      if (activeSpec) {
+        const rawActiveY = getDisplayY(activeSpec.data.y, activeSpec.data.yUnits, displayYUnits)
+        const actualY = applyScaleY(rawActiveY.slice(), activeSpec.scaleY, displayYUnits)
+        const actualMin = Math.min(...actualY)
+        let actualMax = Math.max(...actualY)
+        if (actualMax > 1) {
+          actualMax = actualMax + Math.max(0.02, (actualMax - 1) * 0.05)
+        }
+        const actualRange = (actualMax - actualMin) || 1
+        yMin = Math.min(actualMax - 0.001, actualMin + yMinOffset * actualRange)
+        yMax = actualMax
+      } else {
+        const allY = visible.flatMap(prepareData)
+        const baseMinY = normalizeY ? 0 : Math.min(...allY)
+        let baseMaxY = Math.max(...allY, 1)
+        if (!normalizeY && baseMaxY > 1) {
+          baseMaxY = baseMaxY + Math.max(0.02, (baseMaxY - 1) * 0.05)
+        }
+        yMin = Math.min(baseMaxY - 0.01, baseMinY + yMinOffset)
+        yMax = baseMaxY
       }
-      yMin = Math.min(baseMaxY - 0.01, baseMinY + yMinOffset)
-      yMax = baseMaxY
     }
     const yTicks = niceTicks(yMin, yMax)
     const yTickEls = yTicks.map((v) => {
@@ -510,7 +531,7 @@ export function SpectrumDataDisplay({
       return { v, y }
     })
     return { xTickEls, xMinorTickEls, yTickEls, yMin, yMax }
-  }, [wavenumberMin, wavenumberMax, plotW, plotH, overlayMode, visible, normalizeY, displayYUnits, labelsTop, yMinOffset])
+  }, [wavenumberMin, wavenumberMax, plotW, plotH, overlayMode, visible, normalizeY, displayYUnits, labelsTop, yMinOffset, activeSpectrumId])
 
   const axisY = labelsTop + plotH
 
