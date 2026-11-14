@@ -9,6 +9,7 @@ import {
   resampleImageToWavenumberSpace,
 } from '../utils/imageUtils'
 import { parseJDX } from '../utils/jdxParser'
+import { readSpectrumFileAsText } from '../utils/smfParser'
 import { parseJcampForEditing } from '../utils/jcampEditorUtils'
 import { normXToWavenumber, findLocalMinima, findLocalMaxima } from '../utils/spectrumPath'
 import { isAbsorbance, getDisplayY } from '../utils/spectrumUnits'
@@ -46,6 +47,9 @@ const Y_SCALE_MAX = 10
 /** Range inputs for distributed vertical gap (px); keep desktop + settings in sync. */
 const DISTRIBUTED_GAP_MIN = -420
 const DISTRIBUTED_GAP_MAX = 120
+/** Default / min width (px) for the centered stacking shell; drag left/right edges to widen. */
+const STACKING_SHELL_DEFAULT_WIDTH = 900
+const STACKING_SHELL_MIN_WIDTH = 900
 
 const EyeIcon = ({ visible = true, size = 14 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -702,6 +706,19 @@ function buildExportAdjustmentNoteLines(spectra, visibleIds, zoomRange, chartWid
  * overlays stay pinned to the same spot on the chart regardless of the
  * rendered output size.
  */
+/**
+ * A molecule overlay is hidden along with its linked spectrum so the chart
+ * stays uncluttered when the user toggles a spectrum off. Overlays that are
+ * unlinked, or that reference a deleted spectrum (orphan link), stay visible.
+ */
+function isOverlayVisible(overlay, spectra, visibleIds) {
+  const linkedId = overlay?.linkedSpectrumId
+  if (!linkedId) return true
+  const exists = Array.isArray(spectra) && spectra.some((s) => s.id === linkedId)
+  if (!exists) return true
+  return visibleIds?.has?.(linkedId) ?? true
+}
+
 function appendMoleculeOverlaysToExportSvg(svgClone, overlays, spectra, svgWidth, plotHeight) {
   if (!overlays?.length || !svgClone) return
   const ns = 'http://www.w3.org/2000/svg'
@@ -829,7 +846,8 @@ function buildExportSvgBlobUrl(displayWrapRef, spectra, visibleIds, displayHeigh
   }
   const { g: legendG2 } = createExportLegend(visibleDataSpectra, spectra, displayHeight, 800)
   svgClone.appendChild(legendG2)
-  appendMoleculeOverlaysToExportSvg(svgClone, moleculeOverlays, spectra, 800, displayHeight)
+  const exportableOverlays = moleculeOverlays.filter((o) => isOverlayVisible(o, spectra, visibleIds))
+  appendMoleculeOverlaysToExportSvg(svgClone, exportableOverlays, spectra, 800, displayHeight)
   const svgStr = new XMLSerializer().serializeToString(svgClone)
   const blob = new Blob([svgStr], { type: 'image/svg+xml' })
   return URL.createObjectURL(blob)
@@ -1394,9 +1412,11 @@ export default function StackingView() {
   const [collapsedPeakGroups, setCollapsedPeakGroups] = useState(new Set()) // Set of 'spectrumId-groupId'
   const [displayHeight, setDisplayHeight] = useState(BASE_DISPLAY_HEIGHT)
   const [sidebarWidth, setSidebarWidth] = useState(200)
+  const [shellMaxWidth, setShellMaxWidth] = useState(STACKING_SHELL_DEFAULT_WIDTH)
   const [sidebarTab, setSidebarTab] = useState('spectra')
   const [sampleLibraryOpen, setSampleLibraryOpen] = useState(false)
   const resizeStartRef = useRef(null)
+  const shellLayoutResizeRef = useRef(null)
   const canvasRef = useRef(null)
   const fullBufferRef = useRef(null)
   const jdxInputRef = useRef(null)
@@ -1936,6 +1956,15 @@ export default function StackingView() {
     resizeStartRef.current = { x: e.clientX, width: sidebarWidth }
   }, [sidebarWidth])
 
+  const handleShellLayoutResizeStart = useCallback(
+    (edge) => (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      shellLayoutResizeRef.current = { edge, originX: e.clientX, originW: shellMaxWidth }
+    },
+    [shellMaxWidth]
+  )
+
   useEffect(() => {
     const handleResizeMove = (e) => {
       const start = resizeStartRef.current
@@ -1955,6 +1984,25 @@ export default function StackingView() {
     }
   }, [])
 
+  useEffect(() => {
+    const handleShellMove = (e) => {
+      const drag = shellLayoutResizeRef.current
+      if (!drag) return
+      const maxW = Math.max(STACKING_SHELL_MIN_WIDTH, window.innerWidth - 32)
+      const dw = drag.edge === 'right' ? e.clientX - drag.originX : drag.originX - e.clientX
+      setShellMaxWidth(Math.min(maxW, Math.max(STACKING_SHELL_MIN_WIDTH, drag.originW + dw)))
+    }
+    const handleShellEnd = () => {
+      shellLayoutResizeRef.current = null
+    }
+    window.addEventListener('mousemove', handleShellMove)
+    window.addEventListener('mouseup', handleShellEnd)
+    return () => {
+      window.removeEventListener('mousemove', handleShellMove)
+      window.removeEventListener('mouseup', handleShellEnd)
+    }
+  }, [])
+
   const [downloadFormat, setDownloadFormat] = useState('png')
   const [exportModalOpen, setExportModalOpen] = useState(false)
   const [exportIncludeList, setExportIncludeList] = useState(false)
@@ -1964,10 +2012,8 @@ export default function StackingView() {
   const handleAddJdxFile = useCallback((file) => {
     if (!file) return
     setJdxError(null)
-    const reader = new FileReader()
-    reader.onload = () => {
+    readSpectrumFileAsText(file).then((text) => {
       try {
-        const text = reader.result
         const parsed = parseJDX(text)
         if (!parsed.x?.length || !parsed.y?.length) {
           setJdxError('No spectral data found in file')
@@ -1975,7 +2021,7 @@ export default function StackingView() {
         }
         const { headerEntries } = parseJcampForEditing(text)
         const jdxMetadata = headerEntries.filter((e) => e.type === 'metadata').map((e) => ({ key: e.key, value: e.value }))
-        const baseName = file.name.replace(/\.(jdx|jcamp|dx)$/i, '')
+        const baseName = file.name.replace(/\.(jdx|jcamp|dx|smf)$/i, '')
         const fileName = parsed.title || baseName || file.name
         addSpectrum({
           data: { x: parsed.x, y: parsed.y, yUnits: parsed.yUnits },
@@ -1990,8 +2036,7 @@ export default function StackingView() {
       } catch (err) {
         setJdxError(err.message || 'Failed to parse JCAMP-DX file')
       }
-    }
-    reader.readAsText(file)
+    }, (err) => setJdxError(err.message || 'Failed to read file'))
   }, [addSpectrum])
 
   useEffect(() => {
@@ -2049,9 +2094,9 @@ export default function StackingView() {
     setIsDragActive(false)
     const files = Array.from(e.dataTransfer?.files || [])
     if (files.length === 0) return
-    const valid = files.filter((f) => /\.(jdx|dx|jcamp)$/i.test(f.name))
+    const valid = files.filter((f) => /\.(jdx|dx|jcamp|smf)$/i.test(f.name))
     if (valid.length === 0) {
-      setJdxError('Please drop a JCAMP-DX file (.jdx, .dx, .jcamp).')
+      setJdxError('Please drop a JCAMP-DX (.jdx, .dx, .jcamp) or Shimadzu (.smf) file.')
       return
     }
     valid.forEach((file) => handleAddJdxFile(file))
@@ -2067,6 +2112,9 @@ export default function StackingView() {
     const effectiveFormat = !hasDataOnly && format === 'svg' ? 'png' : format
     const baseName = (downloadName || 'spectra-stacked').trim().replace(/[/\\:*?"<>|]/g, '-') || 'spectra-stacked'
     const listText = hasDataOnly && includeList ? buildPeakRegionList(spectra, visibleIds, zoomRange) : ''
+    // Mirror the on-screen filter so cards linked to a hidden spectrum are
+    // omitted from PNG / SVG / PDF exports as well.
+    const exportableOverlays = moleculeOverlays.filter((o) => isOverlayVisible(o, spectra, visibleIds))
     const addImageToPdf = (pdf, imgData) => {
       pdf.addImage(imgData, 'PNG', 0, 0, EXPORT_WIDTH_IN, EXPORT_HEIGHT_IN)
     }
@@ -2134,7 +2182,7 @@ export default function StackingView() {
           svgClone.appendChild(listG)
         }
         svgClone.appendChild(legendG)
-        appendMoleculeOverlaysToExportSvg(svgClone, moleculeOverlays, spectra, 800, origHeight)
+        appendMoleculeOverlaysToExportSvg(svgClone, exportableOverlays, spectra, 800, origHeight)
         const svgStr = new XMLSerializer().serializeToString(svgClone)
         const blob = new Blob([svgStr], { type: 'image/svg+xml' })
         const url = URL.createObjectURL(blob)
@@ -2172,7 +2220,7 @@ export default function StackingView() {
       }
       const { g: legendG2 } = createExportLegend(visibleDataSpectra, spectra, baseHeight, 800)
       svgClone.appendChild(legendG2)
-      appendMoleculeOverlaysToExportSvg(svgClone, moleculeOverlays, spectra, 800, baseHeight)
+      appendMoleculeOverlaysToExportSvg(svgClone, exportableOverlays, spectra, 800, baseHeight)
       const svgStr = new XMLSerializer().serializeToString(svgClone)
       const blob = new Blob([svgStr], { type: 'image/svg+xml' })
       const url = URL.createObjectURL(blob)
@@ -2282,15 +2330,37 @@ export default function StackingView() {
   const editingMoleculeMolfile = editingMolecule?.molfile ?? ''
   const editingMoleculeLabel = editingMolecule?.label ?? ''
 
+  const stackingShellRootStyle = useMemo(
+    () => ({
+      position: 'relative',
+      maxWidth: `min(${shellMaxWidth}px, calc(100vw - 3rem))`,
+      width: '100%',
+    }),
+    [shellMaxWidth]
+  )
+
   if (spectra.length === 0 && archivedSpectra.length === 0) {
     return (
       <div
         className="app stacking-empty"
+        style={stackingShellRootStyle}
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
         onDragOver={handleDragOver}
         onDrop={handleDrop}
       >
+        <div
+          className="stacking-shell-resize-handle stacking-shell-resize-handle--left"
+          onMouseDown={handleShellLayoutResizeStart('left')}
+          title="Drag to widen layout"
+          aria-label="Drag left edge to widen layout"
+        />
+        <div
+          className="stacking-shell-resize-handle stacking-shell-resize-handle--right"
+          onMouseDown={handleShellLayoutResizeStart('right')}
+          title="Drag to widen layout"
+          aria-label="Drag right edge to widen layout"
+        />
         {isDragActive && (
           <div className="stacking-drop-overlay" aria-hidden="true">
             <div className="stacking-drop-overlay-content">Drop JCAMP-DX file to add</div>
@@ -2310,7 +2380,7 @@ export default function StackingView() {
             </button>
           </div>
           <p className="subtitle">
-            Choose a spectrum from the sample library or load your own JCAMP-DX files (.jdx, .dx).
+            Choose a spectrum from the sample library or load your own JCAMP-DX (.jdx, .dx) or Shimadzu (.smf) files.
           </p>
           <div className="empty-actions">
             <button
@@ -2323,7 +2393,7 @@ export default function StackingView() {
             <input
               ref={jdxInputRef}
               type="file"
-              accept=".jdx,.jcamp,.dx"
+              accept=".jdx,.jcamp,.dx,.smf"
               onChange={handleJdxFileSelect}
               className="file-input-hidden"
             />
@@ -2411,11 +2481,24 @@ export default function StackingView() {
   return (
     <div
       className="app stacking-view"
+      style={stackingShellRootStyle}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
       onDragOver={handleDragOver}
       onDrop={handleDrop}
     >
+      <div
+        className="stacking-shell-resize-handle stacking-shell-resize-handle--left"
+        onMouseDown={handleShellLayoutResizeStart('left')}
+        title="Drag to widen layout"
+        aria-label="Drag left edge to widen layout"
+      />
+      <div
+        className="stacking-shell-resize-handle stacking-shell-resize-handle--right"
+        onMouseDown={handleShellLayoutResizeStart('right')}
+        title="Drag to widen layout"
+        aria-label="Drag right edge to widen layout"
+      />
       {isDragActive && (
         <div className="stacking-drop-overlay" aria-hidden="true">
           <div className="stacking-drop-overlay-content">Drop JCAMP-DX file to add</div>
@@ -2558,17 +2641,19 @@ export default function StackingView() {
             )}
             {hasDataOnly && moleculeOverlays.length > 0 && (
               <div className="molecule-overlay-layer" aria-label="Structure overlays">
-                {moleculeOverlays.map((overlay) => (
-                  <MoleculeOverlay
-                    key={overlay.id}
-                    overlay={overlay}
-                    wrapRef={displayWrapRef}
-                    spectra={spectra}
-                    onUpdate={updateMoleculeOverlay}
-                    onDelete={removeMoleculeOverlay}
-                    onEdit={openMoleculeEditor}
-                  />
-                ))}
+                {moleculeOverlays
+                  .filter((overlay) => isOverlayVisible(overlay, spectra, visibleIds))
+                  .map((overlay) => (
+                    <MoleculeOverlay
+                      key={overlay.id}
+                      overlay={overlay}
+                      wrapRef={displayWrapRef}
+                      spectra={spectra}
+                      onUpdate={updateMoleculeOverlay}
+                      onDelete={removeMoleculeOverlay}
+                      onEdit={openMoleculeEditor}
+                    />
+                  ))}
               </div>
             )}
             {touchRegionAdjustMode && dragSelect && hasDataOnly && (
@@ -2741,7 +2826,7 @@ export default function StackingView() {
               <input
                 ref={jdxInputRef}
                 type="file"
-                accept=".jdx,.jcamp,.dx"
+                accept=".jdx,.jcamp,.dx,.smf"
                 onChange={handleJdxFileSelect}
                 className="file-input-hidden"
               />

@@ -513,7 +513,8 @@ struct ContentView: View {
         guard let file,
               let row = analyzeBySource[canonicalPathKey(for: file.url)],
               row.kind != "error" else { return }
-        let incoming = (try? String(contentsOf: file.url, encoding: .utf8)) ?? ""
+        // .smf sources are binary; Node sends the converted JCAMP-DX text for those.
+        let incoming = row.convertedText ?? (try? String(contentsOf: file.url, encoding: .utf8)) ?? ""
         var existingText = ""
         if let exPath = existingLibraryPathForDiff(row: row, sourceURL: file.url) {
             existingText = (try? String(contentsOf: URL(fileURLWithPath: exPath), encoding: .utf8)) ?? ""
@@ -583,7 +584,7 @@ struct ContentView: View {
     private func scanWatchFolder() {
         let dir = URL(fileURLWithPath: watchFolderPath, isDirectory: true)
         guard let urls = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil) else { return }
-        let allowed = ["jdx", "dx", "jcamp"]
+        let allowed = ["jdx", "dx", "jcamp", "smf"]
         for u in urls where u.hasDirectoryPath == false {
             let ext = u.pathExtension.lowercased()
             guard allowed.contains(ext) else { continue }
@@ -597,7 +598,7 @@ struct ContentView: View {
     private func addFiles() {
         let p = NSOpenPanel()
         p.allowsMultipleSelection = true
-        p.allowedContentTypes = ["jdx", "dx", "jcamp"].compactMap { UTType(filenameExtension: $0) }
+        p.allowedContentTypes = ["jdx", "dx", "jcamp", "smf"].compactMap { UTType(filenameExtension: $0) }
         if p.runModal() == .OK {
             for url in p.urls {
                 if !prospectiveFiles.contains(where: { $0.url == url }) {

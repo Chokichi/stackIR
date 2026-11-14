@@ -29,6 +29,8 @@ struct AnalyzeFileRow: Codable, Identifiable {
     let casNumber: String?
     let title: String?
     let validDecisions: [String]
+    /// JCAMP-DX text when the source was converted on import (Shimadzu .smf); otherwise null.
+    let convertedText: String?
     /// When duplicate by CAS, all replaceable library files with the same ##CAS REGISTRY NO=.
     let casCandidates: [CasCandidate]?
     /// All duplicate candidates (CAS, XYDATA, etc.) — use for replace-target picker.

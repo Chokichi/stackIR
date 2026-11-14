@@ -33,6 +33,7 @@ export default function MoleculeEditorModal({
 }) {
   const ketcherRef = useRef(null)
   const providerRef = useRef(null)
+  const modalBodyRef = useRef(null)
   if (!providerRef.current) {
     providerRef.current = getStructServiceProvider()
     console.log('[MoleculeEditor] mount: using shared StandaloneStructServiceProvider', {
@@ -57,6 +58,55 @@ export default function MoleculeEditorModal({
     console.log('[MoleculeEditor] component mounted')
     return () => console.log('[MoleculeEditor] component unmounted')
   }, [])
+
+  // On touch devices, Ketcher's hidden <textarea class="cliparea"> (used to
+  // capture hotkeys + clipboard events) is autofocused on mount and every
+  // time the user taps the canvas. Because it's a real textarea, mobile
+  // browsers pop up the on-screen keyboard, and any characters the user
+  // types get interpreted by Ketcher's hotkey system (e.g. "s" opens the
+  // structure search). Neutralize both symptoms on coarse-pointer devices
+  // by tagging the cliparea as readOnly + inputMode="none" as it appears.
+  // Ketcher still programmatically writes to .value and dispatches paste
+  // events on it, both of which continue to work in this configuration.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const isTouch = window.matchMedia?.('(pointer: coarse)').matches
+      || 'ontouchstart' in window
+    if (!isTouch) return
+    const body = modalBodyRef.current
+    if (!body) return
+
+    const neutralize = (el) => {
+      if (!el || el.dataset.bkgClipareaPatched === '1') return
+      el.setAttribute('inputmode', 'none')
+      el.setAttribute('readonly', 'readonly')
+      el.setAttribute('autocomplete', 'off')
+      el.setAttribute('autocorrect', 'off')
+      el.setAttribute('autocapitalize', 'off')
+      el.setAttribute('spellcheck', 'false')
+      // Ketcher blurs/refocuses this element on every tap. Blur once now to
+      // dismiss the keyboard if it managed to pop up before we patched it.
+      try { el.blur() } catch { /* ignore */ }
+      el.dataset.bkgClipareaPatched = '1'
+    }
+    const scanAndPatch = (root) => {
+      const nodes = root.querySelectorAll?.('.cliparea, [data-cliparea]')
+      nodes?.forEach(neutralize)
+    }
+    scanAndPatch(body)
+
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        m.addedNodes.forEach((n) => {
+          if (n.nodeType !== 1) return
+          if (n.matches?.('.cliparea, [data-cliparea]')) neutralize(n)
+          scanAndPatch(n)
+        })
+      }
+    })
+    observer.observe(body, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  }, [ready])
 
   // Stable callbacks so <Editor>'s internal effect doesn't see them change
   // across parent re-renders and trigger extra remounts.
@@ -359,7 +409,7 @@ export default function MoleculeEditorModal({
           <h3>{isEditing ? 'Edit structure' : 'Insert structure'}</h3>
           <button type="button" className="ghost small" aria-label="Close" onClick={onClose}>×</button>
         </div>
-        <div className="molecule-modal-body">
+        <div className="molecule-modal-body" ref={modalBodyRef}>
           {(!ready || loadingExisting) && (
             <div className="molecule-modal-loading">
               {loadingExisting ? 'Loading saved structure…' : 'Loading molecule editor…'}

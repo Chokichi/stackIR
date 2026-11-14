@@ -14,6 +14,8 @@
  *   Prompts to replace or skip each duplicate.
  *   Accepted → added/, skipped → skipped/, replaced (old file) → replaced/.
  *   Each file written to added/ gets ##DATE ADDED=YYYY-MM-DD inserted on the line after ##OWNER=.
+ *   Shimadzu .smf files are accepted too: they are converted to JCAMP-DX and stored as <name>.jdx
+ *   (the original .smf is left where it is).
  *
  * Analyze (for GUI): node scripts/generateSampleSpectra.js --analyze <file1> [file2...] [folder/]
  *   Prints JSON: kind, matchType, casCandidates (when duplicate by CAS), validDecisions, etc.
@@ -26,6 +28,7 @@ import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import readline from 'node:readline/promises'
+import { smfToJcamp } from '../src/utils/smfParser.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const SAMPLE_FOLDER = path.join(__dirname, '..', 'sample-spectra')
@@ -34,6 +37,9 @@ const SKIPPED_FOLDER = path.join(SAMPLE_FOLDER, 'skipped')
 const REPLACED_FOLDER = path.join(SAMPLE_FOLDER, 'replaced')
 const OUTPUT_FILE = path.join(__dirname, '..', 'src', 'data', 'sampleSpectra.js')
 const EXTENSIONS = ['.jdx', '.jcamp', '.dx']
+/** Shimadzu IRsolution binary files: accepted for import, converted to JCAMP-DX (.jdx) on the way in. */
+const CONVERTED_EXTENSIONS = ['.smf']
+const IMPORT_EXTENSIONS = [...EXTENSIONS, ...CONVERTED_EXTENSIONS]
 const REPLACEABLE_OWNER = 'College of the Sequoias'
 
 const DATA_START_PATTERNS = [/^##XYDATA=/i, /^##PEAK TABLE=/i, /^##XYPOINTS=/i, /^##DATA TABLE=/i]
@@ -411,11 +417,11 @@ function expandPaths(paths) {
     const stat = fs.statSync(resolved)
     if (stat.isDirectory()) {
       const files = fs.readdirSync(resolved)
-        .filter((f) => EXTENSIONS.includes(path.extname(f).toLowerCase()))
+        .filter((f) => IMPORT_EXTENSIONS.includes(path.extname(f).toLowerCase()))
         .sort()
         .map((f) => path.join(resolved, f))
       result.push(...files)
-    } else if (EXTENSIONS.includes(path.extname(resolved).toLowerCase())) {
+    } else if (IMPORT_EXTENSIONS.includes(path.extname(resolved).toLowerCase())) {
       result.push(resolved)
     }
   }
@@ -429,15 +435,29 @@ function classifyImport(srcPath, existing) {
     return { error: 'not_found', source: resolved }
   }
   const ext = path.extname(resolved).toLowerCase()
-  if (!EXTENSIONS.includes(ext)) {
+  if (!IMPORT_EXTENSIONS.includes(ext)) {
     return { error: 'bad_extension', source: resolved, ext }
   }
-  const content = fs.readFileSync(resolved, 'utf-8')
-  const newMeta = extractMetadata(content, path.basename(resolved))
+  // .smf is binary: convert to JCAMP-DX text and store it in the library as <name>.jdx
+  let content
+  let convertedContent = null
+  let destBasename = path.basename(resolved)
+  if (CONVERTED_EXTENSIONS.includes(ext)) {
+    try {
+      const buf = fs.readFileSync(resolved)
+      convertedContent = smfToJcamp(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength), destBasename)
+    } catch (err) {
+      return { error: `convert_failed: ${err.message}`, source: resolved, ext }
+    }
+    content = convertedContent
+    destBasename = `${path.basename(resolved, path.extname(resolved))}.jdx`
+  } else {
+    content = fs.readFileSync(resolved, 'utf-8')
+  }
+  const newMeta = extractMetadata(content, destBasename)
   const newDataBlock = extractDataBlock(content)
   const dupResult = findReplaceableDuplicates(newMeta, content, newDataBlock, existing)
   const dupes = dupResult.matches
-  const destBasename = path.basename(resolved)
   const addedPath = path.join(ADDED_FOLDER, destBasename)
   const skippedPath = path.join(SKIPPED_FOLDER, destBasename)
 
@@ -459,6 +479,7 @@ function classifyImport(srcPath, existing) {
       skippedPath,
       newMeta,
       newDataBlock,
+      convertedContent,
       dupes,
       duplicateKind: dupResult.kind,
       firstDupe: first,
@@ -475,6 +496,7 @@ function classifyImport(srcPath, existing) {
       skippedPath,
       newMeta,
       newDataBlock,
+      convertedContent,
       validDecisions: ['overwrite', 'skip_collision'],
     }
   }
@@ -486,6 +508,7 @@ function classifyImport(srcPath, existing) {
     skippedPath,
     newMeta,
     newDataBlock,
+    convertedContent,
     validDecisions: ['add'],
   }
 }
@@ -501,7 +524,12 @@ function applyImportDecision(classification, existing, decision, autoYes, replac
 
   const kind = classification.kind
   const srcPath = classification.source
-  const { destBasename, newMeta, newDataBlock, skippedPath, addedPath } = classification
+  const { destBasename, newMeta, newDataBlock, skippedPath, addedPath, convertedContent } = classification
+  /** Copy the source into the library, writing the converted JCAMP-DX text for .smf sources. */
+  const copyToLibrary = (dest) => {
+    if (convertedContent != null) fs.writeFileSync(dest, convertedContent, 'utf-8')
+    else fs.copyFileSync(srcPath, dest)
+  }
 
   if (kind === 'duplicate') {
     const dupes = classification.dupes ?? []
@@ -517,7 +545,7 @@ function applyImportDecision(classification, existing, decision, autoYes, replac
       if (fs.existsSync(first.filePath)) {
         fs.renameSync(first.filePath, path.join(REPLACED_FOLDER, first.file))
       }
-      fs.copyFileSync(srcPath, first.filePath)
+      copyToLibrary(first.filePath)
       applyDateAddedToPath(first.filePath)
       const idx = existing.findIndex((e) => e.file === first.file)
       if (idx >= 0) {
@@ -529,7 +557,7 @@ function applyImportDecision(classification, existing, decision, autoYes, replac
     if (decision === 'skip') {
       if (!autoYes) {
         fs.mkdirSync(SKIPPED_FOLDER, { recursive: true })
-        fs.copyFileSync(srcPath, skippedPath)
+        copyToLibrary(skippedPath)
       }
       return { added: 0, replaced: 0, skipped: 1 }
     }
@@ -540,7 +568,7 @@ function applyImportDecision(classification, existing, decision, autoYes, replac
     if (decision === 'skip_collision') {
       if (!autoYes) {
         fs.mkdirSync(SKIPPED_FOLDER, { recursive: true })
-        fs.copyFileSync(srcPath, skippedPath)
+        copyToLibrary(skippedPath)
       }
       return { added: 0, replaced: 0, skipped: 1 }
     }
@@ -560,10 +588,10 @@ function applyImportDecision(classification, existing, decision, autoYes, replac
 
   fs.mkdirSync(ADDED_FOLDER, { recursive: true })
   const isLooseInSampleFolder = path.resolve(path.dirname(srcPath)) === path.resolve(SAMPLE_FOLDER)
-  if (isLooseInSampleFolder) {
+  if (isLooseInSampleFolder && convertedContent == null) {
     fs.renameSync(srcPath, addedPath)
   } else {
-    fs.copyFileSync(srcPath, addedPath)
+    copyToLibrary(addedPath)
   }
   applyDateAddedToPath(addedPath)
   existing.push({ file: destBasename, filePath: addedPath, meta: newMeta, dataBlock: newDataBlock })
@@ -595,6 +623,8 @@ function analyzeMode(filePaths) {
       casNumber: c.newMeta.casNumber || null,
       title: c.newMeta.name || null,
       validDecisions: c.validDecisions,
+      // JCAMP-DX text for sources that were converted (.smf), so the GUI can diff it
+      convertedText: c.convertedContent ?? null,
       existingInAdded: null,
       casCandidates: null,
       duplicateCandidates: null,
