@@ -16,7 +16,7 @@ const HELP_CONTENT = {
         title: 'Getting started',
         items: [
           { term: 'Sample library', desc: 'Load pre-loaded IR spectra. Search by name, CAS No., or functional group; sort by Name, CAS, or Functional groups. Click Add or double-click a row. Entries from College of the Sequoias show a COS label in the list.' },
-          { term: 'Add JCAMP-DX file', desc: 'Load your own spectra. Supports .jdx, .jcamp, and .dx files.' },
+          { term: 'Add JCAMP-DX file', desc: 'Load your own spectra. Supports .jdx, .jcamp, and .dx files, plus Shimadzu IRsolution .smf files.' },
           { term: 'Drag and drop', desc: 'Drop JCAMP-DX files onto the page to add them to the list.' },
         ],
       },

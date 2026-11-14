@@ -8,6 +8,7 @@ import {
   normalizeHeaderEntries,
   getDownloadBaseNameFromTitle,
 } from '../utils/jcampEditorUtils'
+import { readSpectrumFileAsText } from '../utils/smfParser'
 import './JCAMPDXEditor.css'
 
 const KNOWN_KEYS = [
@@ -128,10 +129,8 @@ function applyGroupEditsToEntries(headerEntries, groupEdits) {
 
 function parseFileToEntry(file) {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => {
+    readSpectrumFileAsText(file).then((text) => {
       try {
-        const text = String(reader.result)
         const { headerEntries, dataBlock } = parseJcampForEditing(text)
         const normalized = normalizeHeaderEntries(headerEntries)
         const auditEntry = normalized.find((e) => e.type === 'metadata' && e.key === 'AUDIT TRAIL')
@@ -147,9 +146,7 @@ function parseFileToEntry(file) {
       } catch (err) {
         reject(err)
       }
-    }
-    reader.onerror = () => reject(new Error('Failed to read file'))
-    reader.readAsText(file)
+    }, reject)
   })
 }
 
@@ -437,7 +434,7 @@ export default function JCAMPDXEditor() {
       <div className="jcamp-editor-upload">
         <input
           type="file"
-          accept=".jdx,.jcamp,.dx"
+          accept=".jdx,.jcamp,.dx,.smf"
           multiple
           onChange={handleFileSelect}
           className="file-input-hidden"

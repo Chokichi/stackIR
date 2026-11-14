@@ -9,6 +9,7 @@ import {
   resampleImageToWavenumberSpace,
 } from '../utils/imageUtils'
 import { parseJDX } from '../utils/jdxParser'
+import { readSpectrumFileAsText } from '../utils/smfParser'
 import { parseJcampForEditing } from '../utils/jcampEditorUtils'
 import { normXToWavenumber, findLocalMinima, findLocalMaxima } from '../utils/spectrumPath'
 import { isAbsorbance, getDisplayY } from '../utils/spectrumUnits'
@@ -2011,10 +2012,8 @@ export default function StackingView() {
   const handleAddJdxFile = useCallback((file) => {
     if (!file) return
     setJdxError(null)
-    const reader = new FileReader()
-    reader.onload = () => {
+    readSpectrumFileAsText(file).then((text) => {
       try {
-        const text = reader.result
         const parsed = parseJDX(text)
         if (!parsed.x?.length || !parsed.y?.length) {
           setJdxError('No spectral data found in file')
@@ -2022,7 +2021,7 @@ export default function StackingView() {
         }
         const { headerEntries } = parseJcampForEditing(text)
         const jdxMetadata = headerEntries.filter((e) => e.type === 'metadata').map((e) => ({ key: e.key, value: e.value }))
-        const baseName = file.name.replace(/\.(jdx|jcamp|dx)$/i, '')
+        const baseName = file.name.replace(/\.(jdx|jcamp|dx|smf)$/i, '')
         const fileName = parsed.title || baseName || file.name
         addSpectrum({
           data: { x: parsed.x, y: parsed.y, yUnits: parsed.yUnits },
@@ -2037,8 +2036,7 @@ export default function StackingView() {
       } catch (err) {
         setJdxError(err.message || 'Failed to parse JCAMP-DX file')
       }
-    }
-    reader.readAsText(file)
+    }, (err) => setJdxError(err.message || 'Failed to read file'))
   }, [addSpectrum])
 
   useEffect(() => {
@@ -2096,9 +2094,9 @@ export default function StackingView() {
     setIsDragActive(false)
     const files = Array.from(e.dataTransfer?.files || [])
     if (files.length === 0) return
-    const valid = files.filter((f) => /\.(jdx|dx|jcamp)$/i.test(f.name))
+    const valid = files.filter((f) => /\.(jdx|dx|jcamp|smf)$/i.test(f.name))
     if (valid.length === 0) {
-      setJdxError('Please drop a JCAMP-DX file (.jdx, .dx, .jcamp).')
+      setJdxError('Please drop a JCAMP-DX (.jdx, .dx, .jcamp) or Shimadzu (.smf) file.')
       return
     }
     valid.forEach((file) => handleAddJdxFile(file))
@@ -2382,7 +2380,7 @@ export default function StackingView() {
             </button>
           </div>
           <p className="subtitle">
-            Choose a spectrum from the sample library or load your own JCAMP-DX files (.jdx, .dx).
+            Choose a spectrum from the sample library or load your own JCAMP-DX (.jdx, .dx) or Shimadzu (.smf) files.
           </p>
           <div className="empty-actions">
             <button
@@ -2395,7 +2393,7 @@ export default function StackingView() {
             <input
               ref={jdxInputRef}
               type="file"
-              accept=".jdx,.jcamp,.dx"
+              accept=".jdx,.jcamp,.dx,.smf"
               onChange={handleJdxFileSelect}
               className="file-input-hidden"
             />
@@ -2828,7 +2826,7 @@ export default function StackingView() {
               <input
                 ref={jdxInputRef}
                 type="file"
-                accept=".jdx,.jcamp,.dx"
+                accept=".jdx,.jcamp,.dx,.smf"
                 onChange={handleJdxFileSelect}
                 className="file-input-hidden"
               />
