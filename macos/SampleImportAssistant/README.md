@@ -2,7 +2,7 @@
 
 macOS SwiftUI helper for importing JCAMP-DX spectra into **BKG_Remover**. It wraps the same logic as `scripts/generateSampleSpectra.js`:
 
-- **Watch folder**: Designate a folder where students drop `.jdx` / `.dx` / `.jcamp` files; they appear in the import list when you scan.
+- **Watch folder**: Designate a folder where students drop `.jdx` / `.dx` / `.jcamp` files (or Shimadzu `.smf` files, which are converted to `.jdx` on import); they appear in the import list when you scan.
 - **Prospective files**: Add/remove paths, merge watch-folder contents with files picked elsewhere.
 - **Analyze**: Runs `node scripts/generateSampleSpectra.js --analyze …` to classify each file (`new`, `duplicate`, `filename_collision`) and learn which existing `sample-spectra/added/` file to compare.
 - **Diff**: Side-by-side **incoming** vs **existing** (when applicable). Default mode is **Metadata (sorted ## keys)**: parses all `##KEY=value` fields before `##XYDATA=` (etc.) and shows **one row per tag, aligned by label** — so an extra tag on one side (e.g. `##DATE ADDED=` from import) only highlights that row, not every following line. **Full file** mode is a raw line-by-line diff (XYDATA dominates highlights). Editing only `generateSampleSpectra.js` does not change the diff until the `.jdx` bytes on disk differ.
@@ -79,7 +79,7 @@ Decisions must match `validDecisions` from `--analyze` for that file’s `kind`.
 
 1. Set **BKG_Remover project root** (once; saved in UserDefaults).
 2. Optional: set **Watch folder** for student uploads; click **Scan watch folder**.
-3. **Add files…** for any extra `.jdx` / `.dx` / `.jcamp` paths.
+3. **Add files…** for any extra `.jdx` / `.dx` / `.jcamp` / `.smf` paths.
 4. **Analyze all** — loads classifications from Node.
 5. For each file that needs a choice, pick **Replace / Skip / Overwrite / …**; it appears in the **Decision queue**.
 6. **Run import (Node)** — executes the batch script; then run `npm run build` in the project if you need a production build.
