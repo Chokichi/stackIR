@@ -23,8 +23,8 @@ Main tool for comparing and annotating IR spectra.
 
 - **Load spectra**
   - **Sample library** — pre-loaded IR spectra with search (name, CAS No., functional group) and sort options (Name, CAS, Functional groups, "COS first, then name"). Entries from College of the Sequoias show a COS badge.
-  - **Add JCAMP-DX file** — load your own `.jdx`, `.jcamp`, or `.dx` files, or Shimadzu IRsolution `.smf` files.
-  - **Drag and drop** — drop JCAMP-DX files anywhere on the page.
+  - **Add spectrum file** — load your own `.jdx`, `.jcamp`, or `.dx` files, or Shimadzu IRsolution `.smf` files.
+  - **Drag and drop** — drop spectrum files (JCAMP-DX or `.smf`) anywhere on the page.
   - **Image spectra** — load an image of a spectrum and calibrate it via three reference wavenumbers (1000 / 2000 / 3000 cm⁻¹).
 
 - **Sidebar controls**

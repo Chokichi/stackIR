@@ -2034,7 +2034,7 @@ export default function StackingView() {
           jdxMetadata,
         })
       } catch (err) {
-        setJdxError(err.message || 'Failed to parse JCAMP-DX file')
+        setJdxError(err.message || 'Failed to parse spectrum file')
       }
     }, (err) => setJdxError(err.message || 'Failed to read file'))
   }, [addSpectrum])
@@ -2363,7 +2363,7 @@ export default function StackingView() {
         />
         {isDragActive && (
           <div className="stacking-drop-overlay" aria-hidden="true">
-            <div className="stacking-drop-overlay-content">Drop JCAMP-DX file to add</div>
+            <div className="stacking-drop-overlay-content">Drop spectrum file to add</div>
           </div>
         )}
         <header className="header">
@@ -2402,7 +2402,7 @@ export default function StackingView() {
               onClick={() => jdxInputRef.current?.click()}
               className="primary empty-action-btn"
             >
-              Add JCAMP-DX file
+              Add spectrum file
             </button>
           </div>
           {jdxError && <div className="error" style={{ marginTop: '1rem' }}>{jdxError}</div>}
@@ -2501,7 +2501,7 @@ export default function StackingView() {
       />
       {isDragActive && (
         <div className="stacking-drop-overlay" aria-hidden="true">
-          <div className="stacking-drop-overlay-content">Drop JCAMP-DX file to add</div>
+          <div className="stacking-drop-overlay-content">Drop spectrum file to add</div>
         </div>
       )}
       <header className="header header-desktop">
@@ -2835,7 +2835,7 @@ export default function StackingView() {
                 onClick={() => jdxInputRef.current?.click()}
                 className="secondary full"
               >
-                Add JCAMP-DX file
+                Add spectrum file
               </button>
               {jdxError && <div className="error" style={{ fontSize: '0.75rem' }}>{jdxError}</div>}
               <div className="spectra-list">

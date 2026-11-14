@@ -445,7 +445,7 @@ export default function JCAMPDXEditor() {
           onClick={() => document.getElementById('jcamp-file-input')?.click()}
           className="primary"
         >
-          {isBatchMode ? 'Upload JCAMP-DX files (replace)' : 'Upload JCAMP-DX file(s)'}
+          {isBatchMode ? 'Upload spectrum files (replace)' : 'Upload spectrum file(s)'}
         </button>
       </div>
 
