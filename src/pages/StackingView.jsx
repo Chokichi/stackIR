@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect, useMemo, lazy, Suspense } from 'react'
+import { useState, useRef, useCallback, useEffect, useLayoutEffect, useMemo, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
 import { Link } from 'react-router-dom'
 import { jsPDF } from 'jspdf'
@@ -47,9 +47,32 @@ const Y_SCALE_MAX = 10
 /** Range inputs for distributed vertical gap (px); keep desktop + settings in sync. */
 const DISTRIBUTED_GAP_MIN = -420
 const DISTRIBUTED_GAP_MAX = 120
-/** Default / min width (px) for the centered stacking shell; drag left/right edges to widen. */
-const STACKING_SHELL_DEFAULT_WIDTH = 900
+/** Min width (px) for the centered stacking shell; drag left/right edges to resize. */
 const STACKING_SHELL_MIN_WIDTH = 900
+/** Space (px) kept free below the plot when auto-fitting it to the window (y-min row + page padding). */
+const STACKING_FIT_BOTTOM_SPACE = 88
+const LAYOUT_STORAGE_KEY = 'stackir-layout'
+
+/** Saved layout sizes. shellWidth null = auto (fit the plot to the window). */
+function loadLayoutFromStorage() {
+  try {
+    const data = JSON.parse(localStorage.getItem(LAYOUT_STORAGE_KEY) || 'null')
+    const num = (v) => (Number.isFinite(v) && v > 0 ? v : null)
+    return { shellWidth: num(data?.shellWidth), sidebarWidth: num(data?.sidebarWidth) }
+  } catch {
+    return { shellWidth: null, sidebarWidth: null }
+  }
+}
+
+function saveLayoutToStorage(layout) {
+  try {
+    localStorage.setItem(LAYOUT_STORAGE_KEY, JSON.stringify(layout))
+  } catch {
+    // ignore quota / privacy errors
+  }
+}
+
+const maxShellWidthForWindow = () => Math.max(STACKING_SHELL_MIN_WIDTH, window.innerWidth - 32)
 
 const EyeIcon = ({ visible = true, size = 14 }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1411,8 +1434,13 @@ export default function StackingView() {
   const [selectedPeakIndices, setSelectedPeakIndices] = useState({}) // { [spectrumId]: Set<number> }
   const [collapsedPeakGroups, setCollapsedPeakGroups] = useState(new Set()) // Set of 'spectrumId-groupId'
   const [displayHeight, setDisplayHeight] = useState(BASE_DISPLAY_HEIGHT)
-  const [sidebarWidth, setSidebarWidth] = useState(200)
-  const [shellMaxWidth, setShellMaxWidth] = useState(STACKING_SHELL_DEFAULT_WIDTH)
+  const [savedLayout] = useState(loadLayoutFromStorage)
+  const [sidebarWidth, setSidebarWidth] = useState(() => Math.min(500, Math.max(150, savedLayout.sidebarWidth ?? 200)))
+  /** Width the user dragged to (remembered between visits); null = auto-fit to the window. */
+  const [shellWidthSetting, setShellWidthSetting] = useState(savedLayout.shellWidth)
+  const [autoShellWidth, setAutoShellWidth] = useState(maxShellWidthForWindow)
+  const shellMaxWidth = shellWidthSetting ?? autoShellWidth
+  const shellRootRef = useRef(null)
   const [sidebarTab, setSidebarTab] = useState('spectra')
   const [sampleLibraryOpen, setSampleLibraryOpen] = useState(false)
   const resizeStartRef = useRef(null)
@@ -1988,9 +2016,10 @@ export default function StackingView() {
     const handleShellMove = (e) => {
       const drag = shellLayoutResizeRef.current
       if (!drag) return
-      const maxW = Math.max(STACKING_SHELL_MIN_WIDTH, window.innerWidth - 32)
-      const dw = drag.edge === 'right' ? e.clientX - drag.originX : drag.originX - e.clientX
-      setShellMaxWidth(Math.min(maxW, Math.max(STACKING_SHELL_MIN_WIDTH, drag.originW + dw)))
+      const maxW = maxShellWidthForWindow()
+      // The shell is centered, so each edge moves half as far as the width changes.
+      const dw = 2 * (drag.edge === 'right' ? e.clientX - drag.originX : drag.originX - e.clientX)
+      setShellWidthSetting(Math.round(Math.min(maxW, Math.max(STACKING_SHELL_MIN_WIDTH, drag.originW + dw))))
     }
     const handleShellEnd = () => {
       shellLayoutResizeRef.current = null
@@ -2002,6 +2031,55 @@ export default function StackingView() {
       window.removeEventListener('mouseup', handleShellEnd)
     }
   }, [])
+
+  // Remember the dragged layout sizes between visits.
+  useEffect(() => {
+    saveLayoutToStorage({ shellWidth: shellWidthSetting, sidebarWidth })
+  }, [shellWidthSetting, sidebarWidth])
+
+  // Auto width: the widest layout whose plot still fits the window (width and height).
+  const hasSpectraLoaded = spectra.length > 0 || archivedSpectra.length > 0
+  useLayoutEffect(() => {
+    if (shellWidthSetting != null) return
+    const fit = () => {
+      const maxW = maxShellWidthForWindow()
+      const root = shellRootRef.current
+      const wrap = displayWrapRef.current
+      let width = maxW
+      if (root && wrap) {
+        const rootRect = root.getBoundingClientRect()
+        const wrapRect = wrap.getBoundingClientRect()
+        if (rootRect.width > 0 && wrapRect.width > 0) {
+          const chromeWidth = rootRect.width - wrapRect.width // sidebar, gaps, padding
+          const plotTop = wrapRect.top + window.scrollY
+          // .stacking-canvas-wrap is capped at max-height: 70vh, so never size the plot taller than that.
+          const availableHeight = Math.min(
+            window.innerHeight - plotTop - STACKING_FIT_BOTTOM_SPACE,
+            window.innerHeight * 0.7
+          )
+          width = chromeWidth + availableHeight * (TARGET_WIDTH / displayHeight)
+          // max-width applies to the content box, so leave the shell's own padding out of it.
+          const cs = getComputedStyle(root)
+          if (cs.boxSizing !== 'border-box') {
+            width -= (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0)
+          }
+        }
+      }
+      const next = Math.round(Math.min(maxW, Math.max(STACKING_SHELL_MIN_WIDTH, width)))
+      setAutoShellWidth((prev) => (Math.abs(prev - next) > 1 ? next : prev))
+    }
+    fit()
+    window.addEventListener('resize', fit)
+    // Also follow viewport changes that don't fire a window resize event.
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(fit)
+    observer?.observe(document.documentElement)
+    return () => {
+      window.removeEventListener('resize', fit)
+      observer?.disconnect()
+    }
+  }, [shellWidthSetting, displayHeight, sidebarWidth, hasSpectraLoaded, hasDataOnly])
+
+  const handleShellLayoutResizeReset = useCallback(() => setShellWidthSetting(null), [])
 
   const [downloadFormat, setDownloadFormat] = useState('png')
   const [exportModalOpen, setExportModalOpen] = useState(false)
@@ -2343,6 +2421,7 @@ export default function StackingView() {
     return (
       <div
         className="app stacking-empty"
+      ref={shellRootRef}
         style={stackingShellRootStyle}
         onDragEnter={handleDragEnter}
         onDragLeave={handleDragLeave}
@@ -2352,14 +2431,16 @@ export default function StackingView() {
         <div
           className="stacking-shell-resize-handle stacking-shell-resize-handle--left"
           onMouseDown={handleShellLayoutResizeStart('left')}
-          title="Drag to widen layout"
-          aria-label="Drag left edge to widen layout"
+          onDoubleClick={handleShellLayoutResizeReset}
+          title="Drag to resize layout (double-click to fit window)"
+          aria-label="Drag left edge to resize layout"
         />
         <div
           className="stacking-shell-resize-handle stacking-shell-resize-handle--right"
           onMouseDown={handleShellLayoutResizeStart('right')}
-          title="Drag to widen layout"
-          aria-label="Drag right edge to widen layout"
+          onDoubleClick={handleShellLayoutResizeReset}
+          title="Drag to resize layout (double-click to fit window)"
+          aria-label="Drag right edge to resize layout"
         />
         {isDragActive && (
           <div className="stacking-drop-overlay" aria-hidden="true">
@@ -2481,6 +2562,7 @@ export default function StackingView() {
   return (
     <div
       className="app stacking-view"
+      ref={shellRootRef}
       style={stackingShellRootStyle}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
@@ -2490,14 +2572,16 @@ export default function StackingView() {
       <div
         className="stacking-shell-resize-handle stacking-shell-resize-handle--left"
         onMouseDown={handleShellLayoutResizeStart('left')}
-        title="Drag to widen layout"
-        aria-label="Drag left edge to widen layout"
+        onDoubleClick={handleShellLayoutResizeReset}
+        title="Drag to resize layout (double-click to fit window)"
+        aria-label="Drag left edge to resize layout"
       />
       <div
         className="stacking-shell-resize-handle stacking-shell-resize-handle--right"
         onMouseDown={handleShellLayoutResizeStart('right')}
-        title="Drag to widen layout"
-        aria-label="Drag right edge to widen layout"
+        onDoubleClick={handleShellLayoutResizeReset}
+        title="Drag to resize layout (double-click to fit window)"
+        aria-label="Drag right edge to resize layout"
       />
       {isDragActive && (
         <div className="stacking-drop-overlay" aria-hidden="true">
